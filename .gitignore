@@ -1,0 +1,22 @@
+# Lo que NO sube.
+#
+# Este repositorio es lo único del Tutor que se hace público, así que la
+# regla es al revés de lo normal: aquí solo puede haber lo que ya se le
+# entrega a cada alumno en la USB.
+
+# Lo que genera la compilación
+src-tauri/target/
+node_modules/
+
+# Nada de la carpeta de arriba. `programa/` lo pone `empaquetar.py` y SÍ
+# sube: es lo mismo que va en la USB, con el generador cifrado y el
+# currículo vacío.
+*.log
+.DS_Store
+Thumbs.db
+
+# Por si acaso: credenciales, nunca.
+.env
+.env.*
+*.key
+*.pem

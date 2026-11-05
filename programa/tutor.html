@@ -1,0 +1,2440 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- QUE EL NAVEGADOR NO SE QUEDE CON UNA COPIA VIEJA DE ESTE ARCHIVO.
+     Los .js se piden con `?v=` y el instalador les pone la fecha, así que
+     esos sí se refrescan. Este archivo no llevaba nada, y el navegador se
+     quedaba con el de la última vez: quedaba un tutor.html antiguo llamando
+     a módulos nuevos, que es la peor mezcla posible porque cada pieza
+     funciona por separado. Se vio el 05/09/2026 — el navegador seguía
+     ejecutando una versión anterior de `abrirCapa` con el archivo del disco
+     ya corregido. -->
+<meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<title>Tutor Okirys</title>
+<!-- EL TEMA, ANTES DE PINTAR NADA.
+     Va aquí arriba y no con el resto del JavaScript a propósito: si se
+     esperara a que carguen los dieciocho scripts, con el tema oscuro
+     elegido la pantalla daría un fogonazo blanco en cada arranque.
+     Sin `try` no se puede: en una ventana privada leer localStorage
+     lanza, y eso dejaría la página sin pintar. -->
+<script>
+try{
+  var _t = localStorage.getItem('tutor-tema');
+  if(_t === 'claro' || _t === 'oscuro')
+    document.documentElement.setAttribute('data-tema', _t);
+}catch(e){}
+</script>
+<style>
+/* ── TEMA ────────────────────────────────────────────────────────────
+   Papel cálido y acento índigo. El papel tirando a crema en vez de
+   blanco puro cansa menos en una sesión larga de estudio, y hace que
+   las tarjetas blancas se despeguen del fondo sin necesidad de bordes
+   gruesos.
+
+   TRES ESTADOS, NO DOS: el tema del sistema manda salvo que se elija a
+   mano. `[data-tema]` en el <html> gana a la media query, y por eso la
+   media query lleva el `:not([data-tema="claro"])`: sin eso, elegir
+   claro con el sistema en oscuro no hacía nada. */
+:root{
+  --bg:#f4f2ee; --panel:#ffffff; --panel-2:#edeae3; --line:#e2ddd3;
+  --tx:#1c1b19; --tx2:#5d5b55; --tx3:#8f8c84;
+  --ok:#17795b; --ok-bg:#e2f4ed; --bad:#b02a2a; --bad-bg:#fbeaea;
+  --acc:#4b56c9; --acc-bg:#ecedfb; --warn:#8a5a09; --warn-bg:#fbf0dc;
+  /* El color que va ENCIMA de un fondo de acento o de verde. En claro
+     esos fondos son oscuros y pide blanco; en oscuro son claros y pide
+     texto oscuro. Medido el 04/11/2026: con el blanco fijo, el boton
+     principal en tema oscuro daba 2,31 de contraste —ilegible— y es
+     justo la llamada a la accion. */
+  --sobre-acc:#fff;
+  --r:12px; --r-sm:8px;
+  --sombra:0 1px 2px rgba(28,27,25,.05), 0 4px 14px rgba(28,27,25,.05);
+  --sombra-alta:0 2px 6px rgba(28,27,25,.07), 0 14px 34px rgba(28,27,25,.10);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-tema="claro"]){
+    --bg:#131318; --panel:#1b1b21; --panel-2:#23232b; --line:#30303a;
+    --tx:#eeeef2; --tx2:#a6a5ae; --tx3:#78777f;
+    --ok:#5fd0a6; --ok-bg:#0d3a2e; --bad:#f49a9a; --bad-bg:#3d1a1a;
+    --acc:#9aa5f5; --acc-bg:#1e2046; --warn:#f0b65c; --warn-bg:#3a2a0a;
+    --sobre-acc:#14141a;
+    --sombra:0 1px 2px rgba(0,0,0,.4), 0 4px 14px rgba(0,0,0,.3);
+    --sombra-alta:0 2px 6px rgba(0,0,0,.5), 0 14px 34px rgba(0,0,0,.45);
+  }
+}
+:root[data-tema="oscuro"]{
+  --bg:#131318; --panel:#1b1b21; --panel-2:#23232b; --line:#30303a;
+  --tx:#eeeef2; --tx2:#a6a5ae; --tx3:#78777f;
+  --ok:#5fd0a6; --ok-bg:#0d3a2e; --bad:#f49a9a; --bad-bg:#3d1a1a;
+  --acc:#9aa5f5; --acc-bg:#1e2046; --warn:#f0b65c; --warn-bg:#3a2a0a;
+  --sobre-acc:#14141a;
+    --sombra:0 1px 2px rgba(0,0,0,.4), 0 4px 14px rgba(0,0,0,.3);
+  --sombra-alta:0 2px 6px rgba(0,0,0,.5), 0 14px 34px rgba(0,0,0,.45);
+}
+*{box-sizing:border-box}
+body{margin:0;font:15px/1.65 system-ui,-apple-system,"Segoe UI",sans-serif;background:var(--bg);color:var(--tx)}
+code{font-family:ui-monospace,"Cascadia Code",Consolas,monospace;background:var(--panel-2);padding:1px 5px;border-radius:4px;font-size:.92em}
+h1,h2,h3{font-weight:600;line-height:1.3;margin:0}
+button{font:inherit;cursor:pointer;border-radius:var(--r-sm);border:1px solid var(--line);background:var(--panel);color:var(--tx);padding:8px 14px;
+       transition:background .13s,border-color .13s,color .13s}
+button:hover{border-color:var(--tx3);background:var(--panel-2)}
+button:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+button.primary{background:var(--acc);border-color:var(--acc);color:var(--sobre-acc)}
+button.primary:hover{background:var(--acc);border-color:var(--acc);filter:brightness(1.08)}
+button:disabled{opacity:.45;cursor:not-allowed}
+
+/* ── CABECERA ────────────────────────────────────────────────────────
+   Antes eran seis pastillas del mismo tamaño en fila: nada destacaba y
+   costaba encontrar lo que se usa a diario. Ahora la marca manda a la
+   izquierda, el estado es una pastilla discreta, y las acciones van
+   agrupadas a la derecha en tamaño pequeño. */
+header{display:flex;align-items:center;gap:10px;padding:10px 18px;
+       border-bottom:1px solid var(--line);background:var(--panel);
+       position:sticky;top:0;z-index:20;flex-wrap:wrap}
+header h1{font-size:15.5px;font-weight:650;letter-spacing:-.01em;
+          margin-right:auto;display:flex;align-items:center;gap:9px}
+/* La marca: un cuadradito con la inicial. Da identidad sin depender de
+   ninguna imagen, que en una app que va a un instalador es una cosa
+   menos que puede faltar. */
+header h1::before{content:"T";width:25px;height:25px;border-radius:7px;
+  background:var(--acc);color:var(--sobre-acc);font-size:13px;font-weight:700;
+  display:grid;place-items:center;flex:0 0 auto;letter-spacing:0}
+header button{padding:7px 12px;font-size:13.5px}
+#btnTema{padding:6px 0;width:34px;font-size:15px;line-height:1;text-align:center}
+.dot{width:7px;height:7px;border-radius:50%;display:inline-block;margin-right:6px}
+.badge{font-size:12px;color:var(--tx2);display:flex;align-items:center;
+       padding:5px 11px;background:var(--panel-2);border-radius:99px}
+
+.wrap{display:grid;grid-template-columns:262px minmax(0,1fr) 330px;gap:0;align-items:start}
+@media(max-width:1240px){.wrap{grid-template-columns:262px minmax(0,1fr)} aside{grid-column:2}}
+@media(max-width:900px){.wrap{grid-template-columns:1fr} aside{grid-column:1}}
+
+aside{padding:26px 20px 60px;position:sticky;top:57px;max-height:calc(100vh - 57px);overflow:auto}
+@media(max-width:1240px){aside{position:static;max-height:none;padding-top:0}}
+.fx{display:flex;align-items:center;gap:7px;margin-bottom:6px}
+.fx .sw{width:11px;height:11px;border-radius:3px;flex:0 0 auto}
+.fx input{flex:1;min-width:0;padding:6px 9px;border:1px solid var(--line);border-radius:6px;
+          background:var(--bg);color:var(--tx);font-family:ui-monospace,Consolas,monospace;font-size:13px}
+.fx input:focus{outline:2px solid var(--acc);outline-offset:-1px}
+.fx input.mal{border-color:var(--bad)}
+#calcOut{margin-top:8px}
+#calcOut b{color:var(--tx)}
+.chip{padding:4px 11px;font-size:12.5px;border-radius:99px;margin:0 5px 6px 0}
+.chip.on{background:var(--acc-bg);border-color:var(--acc);color:var(--acc);font-weight:600}
+.chip.alt{opacity:.65;font-size:11.5px}
+#calcBox.dim h5 span:first-child{opacity:.6}
+.ap{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);
+    box-shadow:var(--sombra);padding:15px 16px;margin-bottom:14px}
+.ap h5{margin:0 0 9px;font-size:13px;font-weight:600;color:var(--tx2)}
+.ap .pie{font-size:12.5px;color:var(--tx2);line-height:1.55;margin:9px 0 0}
+.ap .pie code{font-size:12px}
+.cod{background:var(--panel-2);border-radius:7px;padding:11px 12px;margin:0;overflow-x:auto;
+     font-family:ui-monospace,Consolas,monospace;font-size:12.5px;line-height:1.55;color:var(--tx)}
+
+.sv{width:100%;height:auto;display:block}
+.sv text{font:13px system-ui,-apple-system,"Segoe UI",sans-serif;fill:var(--tx)}
+.sv .s{font-size:11px;fill:var(--tx2)}
+.sv .bx{fill:var(--panel-2);stroke:var(--line);stroke-width:.7}
+.sv .tl{fill:var(--acc-bg);stroke:var(--acc);stroke-width:.7}
+.sv .gr{fill:var(--ok-bg);stroke:var(--ok);stroke-width:.7}
+.sv .rd{fill:var(--panel-2);stroke:var(--tx3);stroke-width:.7}
+.sv .rd2{fill:var(--bad-bg);stroke:var(--bad);stroke-width:.7}
+.sv .ok{fill:var(--ok);font-weight:600}
+.sv .bad{fill:var(--bad);font-weight:600}
+.sv .ar{stroke:var(--tx3);stroke-width:1.3;fill:none}
+.sv .ax{stroke:var(--line);stroke-width:1;fill:none}
+.sv .ln{stroke-width:1.7;fill:none}
+.sv .ln.b{stroke:var(--acc)}.sv .ln.g{stroke:var(--ok)}
+.sv .ln.r{stroke:var(--bad)}.sv .ln.a{stroke:var(--warn)}
+.sv .s.g{fill:var(--ok)}.sv .s.b{fill:var(--acc)}
+.sv .s.r{fill:var(--bad)}.sv .s.a{fill:var(--warn)}
+.sv .pt{fill:var(--bad)}
+
+nav{border-right:1px solid var(--line);padding:14px 10px 40px;position:sticky;top:57px;max-height:calc(100vh - 57px);overflow:auto}
+.mod{margin-bottom:14px}
+.mod>h3{font-size:11px;color:var(--tx3);text-transform:uppercase;
+        letter-spacing:.07em;padding:6px 10px 2px;font-weight:700}
+.mod .et{font-size:11.5px;color:var(--tx3);padding:0 10px 7px;display:block}
+.lec{display:flex;align-items:center;gap:9px;width:100%;text-align:left;
+     padding:8px 10px 8px 11px;border:0;background:none;border-radius:var(--r-sm);
+     color:var(--tx2);font-size:14px;line-height:1.35;position:relative}
+.lec:hover{background:var(--panel-2);color:var(--tx)}
+/* La lección en curso: además del fondo, una barra de acento a la
+   izquierda. Solo con el fondo, en la barra lateral llena de cajas
+   claras, no se distinguía de un simple hover. */
+.lec.on{background:var(--acc-bg);color:var(--acc);font-weight:600}
+.lec.on::before{content:"";position:absolute;left:0;top:7px;bottom:7px;
+                width:3px;border-radius:0 3px 3px 0;background:var(--acc)}
+.mark{width:15px;height:15px;border-radius:50%;border:1.5px solid var(--line);
+      flex:0 0 auto;font-size:9px;display:grid;place-items:center;color:var(--sobre-acc)}
+.mark.done{background:var(--ok);border-color:var(--ok)}
+.mark.part{background:var(--warn);border-color:var(--warn)}
+/* Cuánto llevas de cada materia. El dato ya existía —las marcas de cada
+   lección— pero había que contarlo a ojo, lección por lección. */
+.mod .avance{height:3px;background:var(--panel-2);border-radius:99px;
+             margin:0 10px 8px;overflow:hidden}
+.mod .avance i{display:block;height:100%;background:var(--ok);
+               border-radius:99px;transition:width .3s}
+.mod .avance.cero i{background:var(--line)}
+
+main{padding:26px 30px 80px;max-width:820px}
+.teoria{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);
+        box-shadow:var(--sombra);padding:22px 24px;margin:16px 0 26px}
+.teoria p{margin:0 0 12px}
+.teoria ul,.teoria ol{margin:0 0 12px;padding-left:22px}
+.teoria li{margin-bottom:5px}
+.regla{background:var(--acc-bg);border-left:3px solid var(--acc);padding:13px 16px;
+       margin:16px 0;border-radius:0 var(--r-sm) var(--r-sm) 0}
+.real{background:var(--panel-2);border-left:3px solid var(--tx3);padding:13px 16px;
+      margin:16px 0;border-radius:0 var(--r-sm) var(--r-sm) 0;font-size:14.5px}
+.tabla{border-collapse:collapse;width:100%;margin:12px 0;font-size:14px}
+.tabla th,.tabla td{border:1px solid var(--line);padding:7px 10px;text-align:left}
+.tabla th{background:var(--panel-2);font-weight:600}
+
+.ej{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);
+    box-shadow:var(--sombra);padding:20px 22px;margin-bottom:16px;
+    transition:border-color .15s,box-shadow .15s}
+.ej.ok{border-color:var(--ok)}
+.ej.bad{border-color:var(--bad)}
+.ejnum{font-size:12px;color:var(--tx3);margin-bottom:6px}
+.enun{margin-bottom:12px}
+.vars{font-size:13.5px;color:var(--tx2);background:var(--panel-2);padding:9px 12px;border-radius:7px;margin-bottom:12px}
+.op{display:block;width:100%;text-align:left;margin-bottom:7px;padding:10px 13px}
+.op.sel{border-color:var(--acc);background:var(--acc-bg)}
+.op.right{border-color:var(--ok);background:var(--ok-bg);color:var(--ok);font-weight:600}
+.op.wrong{border-color:var(--bad);background:var(--bad-bg);color:var(--bad)}
+input[type=text]{width:100%;padding:11px 13px;border:1px solid var(--line);border-radius:var(--r);background:var(--bg);color:var(--tx);font-family:ui-monospace,Consolas,monospace;font-size:15px}
+input[type=text]:focus{outline:2px solid var(--acc);outline-offset:-1px}
+.syms{display:flex;gap:5px;flex-wrap:wrap;margin:9px 0}
+.syms button{padding:5px 11px;font-family:ui-monospace,monospace;font-size:15px;min-width:34px}
+.syms button:active{background:var(--acc-bg);border-color:var(--acc)}
+
+/* Calculadora científica */
+.sci{margin-top:10px}
+.sciPant{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:9px 11px;margin-bottom:8px;text-align:right}
+.sciPant .expr{font:13px ui-monospace,Consolas,monospace;color:var(--tx2);min-height:18px;word-break:break-all}
+.sciPant .res{font:600 22px ui-monospace,Consolas,monospace;color:var(--tx);min-height:28px;word-break:break-all}
+.sciPant .res.mal{color:var(--bad);font-size:13px;font-weight:400}
+.sciTec{display:grid;grid-template-columns:repeat(5,1fr);gap:5px}
+.sciTec button{padding:9px 2px;font-size:13.5px;border-radius:7px;font-family:ui-monospace,Consolas,monospace}
+.sciTec button.fn{font-size:12px;color:var(--acc)}
+.sciTec button.op{color:var(--warn)}
+.sciTec button.eq{background:var(--acc);border-color:var(--acc);color:var(--sobre-acc);font-weight:600}
+.sciTec button.del{color:var(--bad)}
+.sciTop{display:flex;gap:6px;align-items:center;margin-bottom:8px}
+.sciTop button{padding:4px 10px;font-size:11.5px}
+.sciTop button.on{background:var(--acc-bg);border-color:var(--acc);color:var(--acc);font-weight:600}
+.row{display:flex;gap:9px;align-items:center;margin-top:11px;flex-wrap:wrap}
+.fb{margin-top:13px;padding:12px 14px;border-radius:8px;font-size:14.5px}
+.fb.ok{background:var(--ok-bg);color:var(--ok)}
+.fb.bad{background:var(--bad-bg);color:var(--bad)}
+.fb.warn{background:var(--warn-bg);color:var(--warn)}
+.fb b{display:block;margin-bottom:4px}
+/* Práctica: se escribe código o un texto y se comprueba contra criterios. */
+textarea.prac{width:100%;min-height:180px;padding:11px 13px;border:1px solid var(--line);border-radius:var(--r);background:var(--bg);color:var(--tx);font-family:ui-monospace,Consolas,monospace;font-size:14px;line-height:1.5;resize:vertical;tab-size:2;margin-bottom:10px}
+textarea.prac.prosa{font-family:inherit;font-size:15px;line-height:1.65;min-height:260px}
+textarea.prac:focus{outline:2px solid var(--acc);outline-offset:-1px}
+.crit{list-style:none;padding:0;margin:9px 0 0}
+.crit li{padding:3px 0 3px 22px;position:relative;font-size:14px;color:var(--tx)}
+.crit li::before{content:'○';position:absolute;left:3px;color:var(--tx3)}
+.crit li.si::before{content:'✓';color:var(--ok);font-weight:700}
+.crit li.no::before{content:'✗';color:var(--bad);font-weight:700}
+.solucion{margin-top:12px;border-left:3px solid var(--ok);background:var(--panel-2);padding:12px 16px;border-radius:0 8px 8px 0;font-size:14.5px}
+.afondo details{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);margin:0 0 10px;padding:0 18px}
+.afondo summary{cursor:pointer;padding:13px 0;font-weight:600}
+.afondo details[open] summary{border-bottom:1px solid var(--line);margin-bottom:12px}
+.afondo details > div{padding-bottom:14px}
+.ia{margin-top:10px;padding:11px 14px;border-radius:8px;background:var(--panel-2);border-left:3px solid var(--acc);font-size:14.5px;color:var(--tx2)}
+.ia .who{font-size:11.5px;color:var(--tx3);display:block;margin-bottom:3px}
+
+#chatBtn{position:fixed;right:22px;bottom:22px;z-index:30;box-shadow:var(--sombra-alta);
+         border-radius:99px;padding:11px 20px}
+#chat{position:fixed;right:0;top:0;bottom:0;width:390px;max-width:100vw;background:var(--panel);border-left:1px solid var(--line);z-index:40;display:none;flex-direction:column}
+#chat.on{display:flex}
+#chat header{position:static;border-bottom:1px solid var(--line)}
+#msgs{flex:1;overflow:auto;padding:16px;display:flex;flex-direction:column;gap:11px}
+.m{padding:10px 13px;border-radius:11px;max-width:88%;font-size:14.5px;white-space:pre-wrap}
+.m.u{background:var(--acc-bg);color:var(--acc);align-self:flex-end}
+.m.a{background:var(--panel-2);align-self:flex-start}
+#chatIn{display:flex;gap:8px;padding:12px;border-top:1px solid var(--line)}
+#chatIn input{flex:1;font-family:inherit}
+.muted{color:var(--tx2);font-size:14px}
+.err{background:var(--warn-bg);color:var(--warn);padding:13px 15px;border-radius:var(--r);margin:16px 0;font-size:14.5px}
+.err code{background:rgba(0,0,0,.12)}
+.prog{height:5px;background:var(--panel-2);border-radius:99px;overflow:hidden;margin:14px 0 4px}
+.prog i{display:block;height:100%;background:var(--ok);width:0;transition:width .3s}
+pre.pseudo{background:var(--panel-2);border-radius:8px;padding:12px 14px;overflow:auto;font-size:13.5px;line-height:1.55;font-family:ui-monospace,Consolas,monospace;margin:10px 0}
+
+.sec{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);
+     box-shadow:var(--sombra);padding:20px 22px;margin-bottom:16px}
+
+/* ── EL ASISTENTE DE PRIMERA VEZ ─────────────────────────────────────
+   «Vamos a montar tu tutor»: la licencia, la IA y el temario. Lo pinta
+   `ajustes.js` con sus propias clases, y NINGUNA tenía estilo — salía
+   como HTML desnudo sobre blanco (comprobado el 04/11/2026 contra el
+   producto del 27/10: siempre fue así).
+
+   Importa más que ninguna otra pantalla: es la primera que ve quien
+   acaba de pagar por el programa. */
+.bienvenida{max-width:640px;margin:0 auto;padding:30px 24px 70px}
+.bienvenida>h2{font-size:27px;letter-spacing:-.02em;margin-bottom:6px}
+.bienvenida>.sub{color:var(--tx2);font-size:15.5px;margin:0 0 26px}
+
+.paso{background:var(--panel);border:1px solid var(--line);
+      border-radius:var(--r);box-shadow:var(--sombra);
+      padding:20px 22px;margin-bottom:14px}
+.paso h3{font-size:17px;font-weight:650;margin:0 0 6px;
+         display:flex;align-items:center;gap:9px}
+.paso .sub{color:var(--tx2);font-size:14px;line-height:1.6;margin:0 0 15px}
+.paso .sub:last-child{margin-bottom:0}
+/* El paso terminado se aparta: ya no pide nada, y dejarlo con el mismo
+   peso que el pendiente hace que no se vea cuál toca ahora. */
+.paso.hecho{background:transparent;box-shadow:none;border-style:dashed;
+            padding:14px 18px}
+.paso.hecho h3{font-size:15px;color:var(--ok);margin-bottom:2px}
+.paso.hecho .sub{font-size:13.5px;margin-bottom:0}
+
+.bienvenida .fila{display:flex;gap:9px;align-items:center;flex-wrap:wrap}
+.bienvenida .fila input{flex:1;min-width:190px;padding:10px 13px;
+  border:1px solid var(--line);border-radius:var(--r-sm);
+  background:var(--bg);color:var(--tx);font-size:15px}
+.bienvenida .fila input:focus{outline:2px solid var(--acc);outline-offset:-1px}
+.bienvenida button.pri{background:var(--acc);border-color:var(--acc);
+  color:var(--sobre-acc);font-weight:600;padding:10px 18px}
+.bienvenida button.pri:hover{filter:brightness(1.08)}
+.bienvenida button.grande{width:100%;padding:13px;font-size:16px;margin-top:6px}
+.bienvenida button.min{padding:5px 10px;font-size:12.5px}
+
+.opciones{display:flex;flex-direction:column;gap:9px;margin-bottom:14px}
+.opciones label{display:flex;gap:10px;align-items:flex-start;
+  padding:12px 14px;border:1px solid var(--line);border-radius:var(--r-sm);
+  cursor:pointer;line-height:1.5;transition:border-color .13s,background .13s}
+.opciones label:hover{background:var(--panel-2)}
+.opciones input:checked + *,
+.opciones label:has(input:checked){border-color:var(--acc);background:var(--acc-bg)}
+
+/* Donde se sueltan los PDF. Es la acción principal del paso 3, así que
+   se ve como una zona y no como un párrafo más. */
+.soltar{border:2px dashed var(--line);border-radius:var(--r);
+  padding:30px 20px;text-align:center;cursor:pointer;
+  transition:border-color .13s,background .13s}
+.soltar:hover,.soltar.encima{border-color:var(--acc);background:var(--acc-bg)}
+.soltar b{display:block;font-size:15.5px;margin-bottom:3px}
+.soltar span{color:var(--tx2);font-size:13.5px}
+
+.materias{width:100%;border-collapse:collapse;margin-top:14px;font-size:14px}
+.materias td{padding:9px 6px;border-bottom:1px solid var(--line)}
+.materias tr:last-child td{border-bottom:0}
+.materias td:nth-child(2){color:var(--tx2);font-size:13px}
+.materias td:last-child,.materias td:nth-last-child(2){width:1%;white-space:nowrap}
+
+.aviso{font-size:13.5px;margin:11px 0 0;padding:9px 12px;
+       border-radius:var(--r-sm);line-height:1.5}
+.aviso.ok{background:var(--ok-bg);color:var(--ok)}
+.aviso.mal{background:var(--bad-bg);color:var(--bad)}
+.sec h4{margin:0 0 4px;font-size:16px;font-weight:600}
+.ayuda{font-size:13.5px;color:var(--tx2);margin-bottom:11px;line-height:1.6}
+.edit{min-height:120px;border:1px solid var(--line);border-radius:8px;padding:12px 14px;background:var(--bg);
+      font-size:14.5px;line-height:1.7;white-space:pre-wrap;overflow-wrap:anywhere}
+.edit:focus{outline:2px solid var(--acc);outline-offset:-1px}
+.edit:empty:before{content:attr(data-ph);color:var(--tx3)}
+.edit img{max-width:100%;border-radius:6px;margin:6px 0;display:block}
+.tedit{width:100%;border-collapse:collapse;font-size:13.5px;margin-top:4px;display:block;overflow-x:auto;white-space:nowrap}
+.tedit th{background:var(--panel-2);border:1px solid var(--line);padding:7px 9px;text-align:left;font-weight:600;font-size:12.5px}
+.tedit td{border:1px solid var(--line);padding:0}
+.tedit td.fija{background:var(--panel-2);padding:6px 9px;color:var(--tx2)}
+.tedit input{width:100%;min-width:130px;border:0;background:none;color:var(--tx);padding:7px 9px;font:inherit;font-family:ui-monospace,Consolas,monospace}
+.tedit input:focus{outline:2px solid var(--acc);outline-offset:-2px}
+.orient{margin-top:11px;padding:14px 16px;border-radius:8px;background:var(--acc-bg);border-left:3px solid var(--acc);font-size:14px;line-height:1.65;display:none}
+.orient.on{display:block}
+.modelo{margin-top:11px;padding:14px 16px;border-radius:8px;background:var(--warn-bg);
+        border-left:3px solid var(--warn);font-size:14px;line-height:1.65;display:none}
+.modelo.on{display:block}
+.modelo p{margin:0 0 9px}
+.modelo b{color:var(--tx)}
+.orient p{margin:0 0 9px}
+.orient ol,.orient ul{margin:0 0 9px;padding-left:20px}
+.orient .regla{background:var(--panel);border-left-color:var(--tx3)}
+.nota{background:var(--warn-bg);color:var(--warn);border-radius:var(--r);padding:13px 16px;margin-bottom:16px;font-size:14.5px;line-height:1.6}
+.barra{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:18px 0 22px;padding:13px 16px;background:var(--panel);border:1px solid var(--line);border-radius:var(--r);position:sticky;top:57px;z-index:10}
+.barra .sp{margin-left:auto;font-size:13px;color:var(--tx3)}
+
+/* La capa de herramientas y ajustes. Fondo oscurecido para que se entienda
+   que es algo abierto ENCIMA y no otra pantalla: al cerrarla se vuelve
+   exactamente a donde se estaba. */
+#capa{position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.45);
+  display:flex;align-items:flex-start;justify-content:center;padding:2.5vh 1rem;
+  overflow:auto}
+/* SIN ESTA LÍNEA, `hidden` NO OCULTA NADA.
+   La regla del navegador es `[hidden]{display:none}`, un selector de atributo.
+   La de arriba es de id, que gana por especificidad, así que `display:flex`
+   se imponía y la capa quedaba SIEMPRE encima: cubriendo la pantalla entera,
+   con su fondo oscurecido y —lo peor— tragándose todos los clics del tutor.
+   `elementFromPoint` en mitad de la página devolvía «capa».
+   Poner `hidden` desde JavaScript no servía de nada. */
+#capa[hidden]{display:none}
+#capa .capaCaja{background:var(--panel);border:1px solid var(--line);
+  border-radius:var(--r);max-width:64rem;width:100%;padding:1rem 1.2rem 1.4rem}
+#capa .capaTop{display:flex;align-items:center;justify-content:space-between;
+  gap:1rem;margin-bottom:.8rem;padding-bottom:.6rem;border-bottom:1px solid var(--line)}
+#capa .capaTop b{font-size:15px}
+#selHerr{padding:6px 9px;border:1px solid var(--line);border-radius:8px;
+  background:var(--panel);color:inherit;font:inherit;font-size:13px;cursor:pointer}
+.dias{font-size:12.5px;padding:4px 10px;border-radius:99px;background:var(--warn-bg);color:var(--warn);font-weight:600}
+.dias.lejos{background:var(--panel-2);color:var(--tx2)}
+#hoja{background:#fff;color:#000;width:8.5in;max-width:100%;min-height:11in;margin:0 auto 40px;
+      padding:0.9in;box-sizing:border-box;box-shadow:0 2px 20px rgba(0,0,0,.2);
+      font-family:Calibri,"Segoe UI",sans-serif;font-size:12pt;line-height:1.5}
+#hoja h1{font-size:16pt;margin:0 0 6pt;color:#000;font-weight:600}
+#hoja h2{font-size:13pt;margin:16pt 0 5pt;color:#000;font-weight:600}
+#hoja hr{border:0;border-top:1px solid #999;margin:10pt 0}
+#hoja table{border-collapse:collapse;width:100%;margin:6pt 0}
+#hoja td,#hoja th{border:1px solid #444;padding:5pt;font-size:10.5pt;text-align:left}
+#hoja th{background:#eee}
+#hoja img{max-width:100%}
+#hoja i{color:#777}
+/* La clase .real viene pintada para el panel oscuro de la app. Dentro de la
+   hoja —que es blanca y es de donde se captura el PDF— salía una caja oscura
+   con texto negro encima, ilegible. Aquí se repinta en claro. */
+#hoja .real{background:#f4f4f2;color:#000;border-left:3px solid #999;
+            border-radius:0;padding:7pt 10pt;margin:9pt 0;font-size:inherit}
+/* `.regla` tenía exactamente el mismo problema que `.real` y se quedó sin
+   arreglar: usa --acc-bg, que en tema oscuro es #10283f. Medido con el
+   color calculado del propio Chromium (04/11/2026): dentro de la hoja
+   salía una caja azul casi negra con texto negro encima, y así se
+   imprimía. Sale diez veces en `trabajos.js`, o sea en lo que se exporta. */
+#hoja .regla{background:#eef3f9;color:#000;border-left:3px solid #4a6f9c;
+             border-radius:0;padding:7pt 10pt;margin:9pt 0;font-size:inherit}
+/* Mismo caso que .real: `code` se pinta con el color del panel de la app, que
+   en tema oscuro es casi negro. Dentro de la hoja —que es blanca siempre— eso
+   deja una pastilla negra en mitad del párrafo, y así sale impresa. */
+#hoja code{background:#f0f0ee;color:#000;border:1px solid #ddd;
+           border-radius:3px;padding:0 3px}
+/* Cortes de página del PDF. html2pdf captura ESTA hoja, así que las reglas de
+   salto viven aquí y no en el CSS de exportación: sin ellas la librería parte
+   el lienzo a lo bruto y corta un renglón o una fila de tabla por la mitad.
+   Del CSS solo entiende «break-inside: avoid» y «break-before: always»;
+   «break-after» lo ignora, y de ahí el truco del relleno en los títulos: el
+   bloque del h2 mide dos renglones más de lo que se ve, así que no se queda
+   solo al pie de una página. El relleno no va en APA, que maneja sus propios
+   márgenes. */
+#hoja p,#hoja li,#hoja tr,#hoja h1,#hoja pre{page-break-inside:avoid;break-inside:avoid}
+#hoja h2{page-break-inside:avoid;break-inside:avoid}
+#hoja:not(.apa) h2{padding-bottom:30pt;margin-bottom:-25pt}
+#hoja.apa{font-family:"Times New Roman",Times,serif;line-height:2;padding:2.54cm}
+#hoja.apa p{margin:0;text-indent:1.27cm}
+#hoja.apa h2{font-size:12pt;font-weight:600;margin:0;text-indent:0}
+#hoja.apa .apa-portada{text-align:center;padding-top:5cm;min-height:16cm}
+#hoja.apa .apa-portada p{text-indent:0;margin:0}
+#hoja.apa .apa-tit{font-weight:700;margin-bottom:2em!important}
+#hoja.apa .apa-salto{border-top:1px dashed #bbb;margin:10px 0 18px;height:0}
+#hoja.apa .apa-tit2{font-weight:700;text-align:center;text-indent:0!important;margin:0 0 .5em!important}
+#hoja.apa table{line-height:1.2}
+#hoja.apa td,#hoja.apa th{border:0;border-top:1px solid #000;border-bottom:1px solid #000}
+#hoja.apa hr{display:none}
+@media print{
+  header,nav,.barra,#chatBtn,#chat,.ayuda,.orient,button{display:none!important}
+  .sec{border:0;padding:0;margin-bottom:20px;break-inside:avoid}
+  .edit{border:0;padding:0;min-height:0}
+  body{background:#fff;color:#000}
+  .tedit{white-space:normal}
+  .tedit input{color:#000}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Tutor Okirys</h1>
+  <span class="badge" id="estado"><span class="dot" style="background:var(--tx3)"></span>comprobando…</span>
+  <!-- CLARO / OSCURO / EL DEL SISTEMA.
+       Antes solo seguía al sistema, y estudiar de noche con el portátil en
+       claro no había forma de arreglarlo sin cambiar todo Windows. Son
+       tres estados y no dos a propósito: «Sistema» es lo que quiere la
+       mayoría y es lo que viene puesto. -->
+  <button id="btnTema" onclick="rotarTema()" title="Tema de la pantalla"
+          aria-label="Cambiar el tema">◐</button>
+  <button id="btnBuscar" onclick="verBuscador()">Buscar en el temario</button>
+  <button onclick="verDiagnostico()">Mi diagnóstico</button>
+  <!-- HERRAMIENTAS: un desplegable y no cinco botones.
+       Son cinco hoy y van a ser más. Cinco botones sueltos en la cabecera la
+       dejan ilegible, y además la mayoría no se usan en la mayoría de las
+       materias: se abren cuando hacen falta y el resto del tiempo no
+       estorban. -->
+  <select id="selHerr" onchange="abrirHerramienta(this.value)"
+          title="Tabla periódica, conversor, constantes…">
+    <option value="">Herramientas…</option>
+  </select>
+  <button onclick="reconectar()">Reconectar</button>
+  <button id="btnAjustes" onclick="verAjustes()" hidden>Ajustes</button>
+  <button onclick="reiniciar()">Reiniciar progreso</button>
+</header>
+
+<!-- Donde se abren las herramientas y los ajustes. Una capa por encima y no
+     una vista más: se abre, se usa y se cierra sin perder dónde estabas
+     estudiando. -->
+<div id="capa" hidden>
+  <div class="capaCaja">
+    <div class="capaTop">
+      <b id="capaTit"></b>
+      <button onclick="cerrarCapa()">Cerrar</button>
+    </div>
+    <div id="capaCuerpo"></div>
+  </div>
+</div>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <marker id="fl" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+    <path d="M2 1L8 5L2 9" fill="none" stroke="#8a8880" stroke-width="1.6" stroke-linecap="round"/>
+  </marker>
+</defs></svg>
+
+<div class="wrap">
+  <nav id="nav"></nav>
+  <main id="main"></main>
+  <aside>
+    <div class="ap" id="calcBox">
+      <h5 style="display:flex;align-items:center;gap:8px">
+        <span>Calculadora</span>
+        <button id="calcTog" style="margin-left:auto;padding:3px 9px;font-size:12px" onclick="togCalc()">ocultar</button>
+      </h5>
+      <div id="calcCuerpo">
+        <div class="sciTop">
+          <button id="modo-graf" class="on" onclick="modoCalc('graf')">Gráfica</button>
+          <button id="modo-sci" onclick="modoCalc('sci')">Científica</button>
+        </div>
+
+        <div id="panel-sci" style="display:none">
+          <div class="sciPant">
+            <div class="expr" id="sciExpr">&nbsp;</div>
+            <div class="res" id="sciRes">0</div>
+          </div>
+          <div class="sciTop">
+            <button id="sciRad" class="on" onclick="sciAngulo('rad')">RAD</button>
+            <button id="sciDeg" onclick="sciAngulo('deg')">DEG</button>
+            <button style="margin-left:auto" onclick="sciCopiar()" id="sciCopia">Copiar</button>
+          </div>
+          <div class="sciTec">
+            <button class="fn" onclick="sciPon('sin(')">sin</button>
+            <button class="fn" onclick="sciPon('cos(')">cos</button>
+            <button class="fn" onclick="sciPon('tan(')">tan</button>
+            <button class="fn" onclick="sciPon('ln(')">ln</button>
+            <button class="del" onclick="sciBorrar()">⌫</button>
+
+            <button class="fn" onclick="sciPon('sqrt(')">√</button>
+            <button class="fn" onclick="sciPon('^')">xʸ</button>
+            <button class="fn" onclick="sciPon('log(')">log</button>
+            <button class="fn" onclick="sciPon('pi')">π</button>
+            <button class="del" onclick="sciLimpiar()">C</button>
+
+            <button onclick="sciPon('7')">7</button>
+            <button onclick="sciPon('8')">8</button>
+            <button onclick="sciPon('9')">9</button>
+            <button class="op" onclick="sciPon('/')">÷</button>
+            <button class="op" onclick="sciPon('(')">(</button>
+
+            <button onclick="sciPon('4')">4</button>
+            <button onclick="sciPon('5')">5</button>
+            <button onclick="sciPon('6')">6</button>
+            <button class="op" onclick="sciPon('*')">×</button>
+            <button class="op" onclick="sciPon(')')">)</button>
+
+            <button onclick="sciPon('1')">1</button>
+            <button onclick="sciPon('2')">2</button>
+            <button onclick="sciPon('3')">3</button>
+            <button class="op" onclick="sciPon('-')">−</button>
+            <button class="fn" onclick="sciPon('abs(')">|x|</button>
+
+            <button onclick="sciPon('0')">0</button>
+            <button onclick="sciPon('.')">.</button>
+            <button class="fn" onclick="sciAns()">ans</button>
+            <button class="op" onclick="sciPon('+')">+</button>
+            <button class="eq" onclick="sciIgual()">=</button>
+          </div>
+          <div class="pie" id="sciHist" style="margin-top:8px"></div>
+        </div>
+
+        <div id="panel-graf">
+        <div id="calcFs"></div>
+        <canvas id="cv" style="width:100%;height:210px;border:1px solid var(--line);border-radius:7px;cursor:grab;touch-action:none"></canvas>
+        <div class="row" style="margin-top:8px;gap:6px">
+          <button style="padding:5px 10px;font-size:12.5px" onclick="marcarCortes()">Cortes con X</button>
+          <button style="padding:5px 10px;font-size:12.5px" onclick="marcarCruces()">Intersecciones</button>
+          <button style="padding:5px 10px;font-size:12.5px" onclick="areaEntre()">Área entre curvas</button>
+          <button style="padding:5px 10px;font-size:12.5px" onclick="resetVista()">Centrar</button>
+          <button style="padding:5px 10px;font-size:12.5px" onclick="toggleOrient('calcAyuda')">¿Qué acepta?</button>
+        </div>
+        <div id="calcOut" class="pie"></div>
+        <div class="orient" id="calcAyuda">
+          <p><b>Funciones con nombre.</b> Escribe <code>f(x)=x^2-4</code> en una casilla y podrás
+          usarla en las otras: <code>f(3)</code>, <code>f(x)+g(x)</code>, <code>f(g(x))</code>.
+          La letra da igual: <code>h(t)=t^2</code> también vale.</p>
+          <p><b>Integral definida.</b> <code>int(x^2, 0, 3)</code> da 9. El símbolo
+          <code>∫</code> del teclado hace lo mismo: <code>∫(x^2, 0, 3)</code>. Si inviertes los
+          límites, el resultado sale negativo, igual que en la teoría.</p>
+          <p><b>Derivada.</b> <code>der(x^2, 3)</code> da la pendiente en ese punto, que es 6.
+          Sin el segundo argumento, <code>der(x^2)</code>, queda como función y se puede dibujar.</p>
+          <p><b>Área entre curvas.</b> Escribe dos funciones, pulsa <b>Intersecciones</b> para
+          ver dónde se cortan y luego <b>Área entre curvas</b>: sombrea la región y da su valor.</p>
+          <p><b>También entiende:</b> <code>sqrt ln log abs exp sin cos tan</code> con sus
+          inversas e hiperbólicas, <code>max min mod</code>, las constantes <code>pi</code> y
+          <code>e</code>, la multiplicación implícita (<code>2x</code>, <code>3sin(x)</code>) y
+          los símbolos <code>√ π · × ÷ ²</code> del teclado de la app.</p>
+        </div>
+        </div>
+      </div>
+    </div>
+    <div class="ap" id="fichaBox">
+      <h5 id="fichaTit">Fichas de repaso</h5>
+      <div id="fichaChips"></div>
+      <div id="fichaCont" class="pie"></div>
+    </div>
+    <div id="apoyo"></div>
+  </aside>
+</div>
+
+<button id="chatBtn" class="primary" onclick="toggleChat()">Preguntar dudas</button>
+
+<div id="chat">
+  <header><h1 style="font-size:15px">Dudas sobre la lección</h1><button onclick="toggleChat()">Cerrar</button></header>
+  <div id="msgs"></div>
+  <form id="chatIn" onsubmit="enviarChat(event)">
+    <input type="text" id="chatTxt" placeholder="Escribe tu duda…" autocomplete="off">
+    <button class="primary" type="submit">Enviar</button>
+  </form>
+</div>
+
+<script defer src="html2pdf.bundle.min.js?v=202610271945"></script>
+
+<!-- LO QUE HACE QUE ESTO SIRVA PARA OTRO ESTUDIANTE.
+     Va ANTES del currículo porque `config.js` define las constantes que
+     `licencia.js` necesita, y `almacen.js` tiene que existir antes de que el
+     bloque del temario lo busque.
+
+     Ninguno de estos archivos cambia lo que ya funciona: si `contenido.json`
+     está ahí, se usa ese y estos se quedan quietos. -->
+<script src="config.js?v=202611051606"></script>
+<script src="pdfjs.js?v=202610271945"></script>
+<script src="pdfjs-worker.js?v=202610271945"></script>
+<script src="almacen.js?v=202610271945"></script>
+<script src="cargador.js?v=202610271945"></script>
+<script src="ia.js?v=202610271945"></script>
+<script src="licencia.js?v=202610271945"></script>
+<script src="generador-cifrado.js?v=202610271945"></script>
+<script src="abrir-generador.js?v=202610271945"></script>
+<script src="ajustes.js?v=202610271945"></script>
+<script src="herramientas.js?v=202610271945"></script>
+<script src="curriculo.js?v=202610271945"></script>
+<script src="trabajos.js?v=202610271945"></script>
+<script src="apoyo.js?v=202610271945"></script>
+<script src="grafica.js?v=202610271945"></script>
+<script src="fichas.js?v=202610271945"></script>
+<script src="trabajos-nuevos.js?v=202610271945"></script>
+<script>
+const LM = 'http://localhost:1234/v1';
+let MODELO = null, LM_OK = false;
+let modIdx = 0, lecIdx = 0;
+let vista = 'leccion', trabIdx = 0;
+let progreso = JSON.parse(localStorage.getItem('tutor_prog') || '{}');
+let trabajos = JSON.parse(localStorage.getItem('tutor_trab') || '{}');
+
+/* ---------- normalización de fórmulas (determinista, sin IA) ---------- */
+function normalizar(txt){
+  let s = String(txt||'').trim();
+  s = s.replace(/<\s*[-=]+\s*>|↔|⇔/g,'↔');
+  s = s.replace(/[-=]+\s*>|→|⇒|➡️|➡|🡒/g,'→');
+  s = s.replace(/\^|&&|&|∧|·|\*/g,'∧');
+  s = s.replace(/\|\||\||∨|⋁|⋎/g,'∨');
+  s = s.replace(/~|!|¬/g,'¬');
+  s = s.replace(/(^|[^a-zA-Z])[vV]([^a-zA-Z]|$)/g,'$1∨$2');
+  s = s.replace(/\s+/g,'');
+  return s;
+}
+function canon(s){
+  const m={}, abc='ABCDEFGHIJ'; let i=0;
+  return s.replace(/[a-zA-Z]/g,c=>{
+    const k=c.toLowerCase();
+    if(!(k in m)) m[k]=abc[i++]||'Z';
+    return m[k];
+  });
+}
+/* ∧ y ∨ son conmutativas: (q∧p) y (p∧q) son la misma fórmula. → y ↔ no se tocan. */
+function conmutar(s){
+  let p = s;
+  for(let k=0;k<3;k++){
+    p = p.replace(/\(?(¬?[a-zA-Z])([∧∨])(¬?[a-zA-Z])\)?/g,(m,a,op,b)=>{
+      const abre = m.startsWith('('), cierra = m.endsWith(')');
+      const orden = a.replace('¬','') <= b.replace('¬','') ? a+op+b : b+op+a;
+      return (abre?'(':'')+orden+(cierra?')':'');
+    });
+  }
+  return p;
+}
+function quitarParentesisExtremos(s){
+  if(!(s.startsWith('(') && s.endsWith(')'))) return s;
+  let d=0;
+  for(let i=0;i<s.length;i++){
+    if(s[i]==='(')d++;
+    else if(s[i]===')'){d--; if(d===0 && i<s.length-1) return s;}
+  }
+  return s.slice(1,-1);
+}
+
+/* Devuelve: {estado:'ok'|'vars'|'bad'} */
+function validarFormula(resp, ej){
+  const r = conmutar(normalizar(resp));
+  if(!r) return {estado:'bad'};
+  const aceptadas = [ej.esperada, ...(ej.variantes||[])].map(a=>conmutar(normalizar(a)));
+  for(const a of aceptadas){
+    if(r === a) return {estado:'ok'};
+    if(quitarParentesisExtremos(r) === quitarParentesisExtremos(a)) return {estado:'ok'};
+  }
+  for(const a of aceptadas){
+    if(canon(r) === canon(a)) return {estado:'vars'};
+  }
+  return {estado:'bad'};
+}
+
+/* ---------- cliente LM Studio ---------- */
+async function detectar(){
+  const b = document.getElementById('estado');
+  try{
+    const r = await fetch(LM+'/models',{signal:AbortSignal.timeout(4000)});
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    const j = await r.json();
+    const llm = (j.data||[]).map(m=>m.id).filter(id=>!/embed/i.test(id));
+    if(!llm.length) throw new Error('sin modelos de chat');
+    MODELO = llm[0]; LM_OK = true;
+    b.innerHTML = '<span class="dot" style="background:var(--ok)"></span>'+MODELO;
+  }catch(e){
+    LM_OK = false; MODELO = null;
+    b.innerHTML = '<span class="dot" style="background:var(--warn)"></span>sin IA local';
+  }
+  render();
+}
+async function pedirLM(mensajes, maxTok){
+  const r = await fetch(LM+'/chat/completions',{
+    method:'POST', headers:{'Content-Type':'application/json'},
+    signal: AbortSignal.timeout(90000),
+    body: JSON.stringify({model:MODELO,temperature:0.3,max_tokens:maxTok||220,messages:mensajes})
+  });
+  if(!r.ok) throw new Error('HTTP '+r.status);
+  const j = await r.json();
+  return (j.choices?.[0]?.message?.content||'').trim();
+}
+function reconectar(){ detectar(); }
+
+/* ---------- progreso ---------- */
+function guardar(){ localStorage.setItem('tutor_prog', JSON.stringify(progreso)); }
+function marcar(lecId,i,ok){
+  progreso[lecId] = progreso[lecId] || {};
+  if(progreso[lecId][i] !== 'ok') progreso[lecId][i] = ok ? 'ok' : 'bad';
+  guardar(); pintarNav(); pintarBarra();
+}
+/* ---------- tema de la pantalla ---------- */
+/* Tres estados: sistema → claro → oscuro → sistema.
+ *
+ * SE APLICA ANTES DE PINTAR NADA, en el <head>, y no aquí: si se
+ * esperara a que corra este script, con el tema oscuro elegido la
+ * pantalla daría un fogonazo blanco en cada arranque.
+ *
+ * Se guarda en localStorage y no en el almacén del alumno: es una
+ * preferencia de ESTE equipo, y el almacén viaja con sus apuntes. */
+const TEMAS = ['sistema','claro','oscuro'];
+const ICONO_TEMA = {sistema:'◐', claro:'☀', oscuro:'☾'};
+const NOMBRE_TEMA = {sistema:'Tema del sistema', claro:'Tema claro', oscuro:'Tema oscuro'};
+
+function ponerTema(t){
+  if(t==='sistema') document.documentElement.removeAttribute('data-tema');
+  else document.documentElement.setAttribute('data-tema', t);
+  try{ localStorage.setItem('tutor-tema', t); }catch(e){}
+  const b = document.getElementById('btnTema');
+  if(b){ b.textContent = ICONO_TEMA[t]; b.title = NOMBRE_TEMA[t]; }
+}
+function rotarTema(){
+  let t = 'sistema';
+  try{ t = localStorage.getItem('tutor-tema') || 'sistema'; }catch(e){}
+  ponerTema(TEMAS[(TEMAS.indexOf(t)+1) % TEMAS.length]);
+}
+
+function estadoLeccion(lec){
+  const p = progreso[lec.id]||{}, n = lec.ejercicios.length;
+  const ok = Object.values(p).filter(v=>v==='ok').length;
+  return ok===0 ? '' : (ok>=n ? 'done' : 'part');
+}
+function reiniciar(){
+  if(!confirm('¿Borrar todo tu progreso guardado?')) return;
+  progreso = {}; guardar(); render();
+}
+
+/* ---------- navegación ---------- */
+function pintarNav(){
+  const nav = document.getElementById('nav');
+  const mods = CURRICULO.map((m,mi)=>{
+    /* Cuánto llevas de esta materia. El dato ya estaba —la marca de cada
+       lección— pero había que contarlo a ojo, lección por lección. Las
+       empezadas a medias cuentan la mitad: un temario donde todo está
+       abierto y nada terminado no es lo mismo que uno sin tocar. */
+    const hechas = m.lecciones.reduce((n,l)=>{
+      const e = estadoLeccion(l);
+      return n + (e==='done' ? 1 : (e==='part' ? .5 : 0));
+    },0);
+    const pct = m.lecciones.length ? Math.round(hechas/m.lecciones.length*100) : 0;
+    return `
+    <div class="mod">
+      <h3>${m.titulo}</h3><span class="et">${m.etiqueta}</span>
+      <div class="avance ${pct?'':'cero'}" title="${pct}% de ${m.lecciones.length} lecciones"><i style="width:${pct}%"></i></div>
+      ${m.lecciones.map((l,li)=>{
+        const st = estadoLeccion(l);
+        return `<button class="lec ${vista==='leccion'&&mi===modIdx&&li===lecIdx?'on':''}" onclick="ir(${mi},${li})">
+          <span class="mark ${st}">${st==='done'?'✓':''}</span><span>${l.titulo}</span></button>`;
+      }).join('')}
+    </div>`;}).join('');
+  const trabs = `<div class="mod">
+      <h3>Mis trabajos</h3><span class="et">se guardan en este equipo</span>
+      ${TRABAJOS.map((t,i)=>{
+        const d = diasPara(t.entrega);
+        const lleno = Object.keys(trabajos[t.id]||{}).length > 0;
+        return `<button class="lec ${vista==='trabajo'&&i===trabIdx?'on':''}" onclick="irTrabajo(${i})">
+          <span class="mark ${lleno?'part':''}"></span>
+          <span>${t.titulo}<br><span style="font-size:11.5px;color:var(--tx3)">${d===null?'sin fecha':(d<0?'vencido':d+' días')} · ${t.materia}</span></span>
+        </button>`;
+      }).join('')}
+    </div>`;
+  nav.innerHTML = mods + (typeof TrabajosNuevos !== 'undefined' ? trabs.replace(/<\/div>\s*$/, TrabajosNuevos.botonNav() + '</div>') : trabs);
+}
+function ir(mi,li){ vista='leccion'; modIdx=mi; lecIdx=li; document.getElementById('msgs').innerHTML=''; render(); window.scrollTo(0,0); }
+function lecActual(){
+  /* NO SE DA POR HECHO QUE LA LECCION EXISTA.
+   *
+   * En la carpeta de Nicolás siempre existe: hay 18 lecciones y el progreso
+   * guardado apunta a una de ellas. En una instalación nueva el currículo
+   * empieza VACIO, y con `CURRICULO[modIdx].lecciones` eso lanza
+   * «Cannot read properties of undefined» antes de que la pantalla se dibuje.
+   *
+   * También pasa a un alumno que quita una materia: su progreso apunta a algo
+   * que ya no está.
+   */
+  const m = CURRICULO[modIdx];
+  return m && m.lecciones ? m.lecciones[lecIdx] : null;
+}
+
+function pintarBarra(){
+  const el = document.getElementById('barra');
+  if(!el) return;
+  /* `lecActual()` devuelve null con el temario vacio —esta escrito para
+     eso— pero aqui se usaba sin mirar, y `progreso[lec.id]` reventaba. */
+  const lec = lecActual();
+  if(!lec || !lec.ejercicios || !lec.ejercicios.length){ el.style.width='0%'; return; }
+  const p = progreso[lec.id]||{};
+  const ok = Object.values(p).filter(v=>v==='ok').length;
+  el.style.width = Math.round(100*ok/lec.ejercicios.length)+'%';
+}
+
+/* ---------- render ---------- */
+function render(){
+  /* El icono del boton tiene que decir en que tema estas. Se pone aqui
+     y no solo al pulsarlo: al arrancar, el <head> ya aplico el tema
+     guardado pero el boton todavia no existia. */
+  try{ ponerTema(localStorage.getItem('tutor-tema') || 'sistema'); }catch(e){}
+  pintarNav();
+  if(vista === 'trabajo'){ renderTrabajo(); return pintarApoyo(TRABAJOS[trabIdx].id); }
+  if(vista === 'documento'){ renderDocumento(); return pintarApoyo(null); }
+  if(vista === 'diag'){ renderDiagnostico(); return pintarApoyo(null); }
+  if(vista === 'buscar'){ renderBuscador(); return pintarApoyo(null); }
+  renderLeccion();
+  /* Con el temario vacio no hay leccion, y `lecActual()` devuelve null.
+     `pintarApoyo` ya sabe recibir null: es lo que hace en las demas
+     vistas (diagnostico, buscador). */
+  pintarApoyo((lecActual()||{}).id || null);
+}
+
+/* Panel derecho: diagramas, fragmentos de código y recordatorios de la lección.
+   Todo lo del panel sigue a lo que estés viendo: apoyo, fichas y calculadora. */
+function pintarApoyo(id){
+  if(document.getElementById('fichaBox')){ pintarFichas(id); ajustarCalcCtx(id); }
+  const el = document.getElementById('apoyo');
+  const bs = (typeof APOYO !== 'undefined' && id) ? APOYO[id] : null;
+  if(!bs || !bs.length){ el.innerHTML=''; return; }
+  el.innerHTML = bs.map(b=>{
+    const cab = `<h5>${b.titulo}</h5>`;
+    if(b.tipo==='svg')    return `<div class="ap">${cab}${b.svg}${b.pie?`<p class="pie">${b.pie}</p>`:''}</div>`;
+    if(b.tipo==='codigo') return `<div class="ap">${cab}<pre class="cod">${escapar(b.codigo)}</pre></div>`;
+    return `<div class="ap">${cab}<div class="pie">${b.html}</div></div>`;
+  }).join('');
+}
+
+/* ================= TRABAJOS ================= */
+function guardarTrab(){ localStorage.setItem('tutor_trab', JSON.stringify(trabajos)); }
+function dato(tid,i){ return (trabajos[tid]||{})[i]; }
+function setDato(tid,i,v){ trabajos[tid]=trabajos[tid]||{}; trabajos[tid][i]=v; guardarTrab(); marcaGuardado(); }
+let tGuardado=null;
+function marcaGuardado(){
+  const el=document.getElementById('guardado'); if(!el) return;
+  el.textContent='guardado'; clearTimeout(tGuardado);
+  tGuardado=setTimeout(()=>{ if(el) el.textContent=''; },1600);
+}
+/* Un trabajo puede no tener fecha: el aula no siempre la publica al abrir la
+   actividad. Sin este null, `new Date('T00:00:00')` da NaN y la ficha enseña
+   «faltan NaN días · entrega: NaN de undefined de NaN». */
+function diasPara(iso){
+  if(!iso) return null;
+  const hoy=new Date(); hoy.setHours(0,0,0,0);
+  return Math.round((new Date(iso+'T00:00:00') - hoy)/86400000);
+}
+function fmtFecha(iso){
+  if(!iso) return 'sin fecha';
+  const m=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+  const d=new Date(iso+'T00:00:00');
+  return d.getDate()+' de '+m[d.getMonth()]+' de '+d.getFullYear();
+}
+function irTrabajo(i){ vista='trabajo'; trabIdx=i; document.getElementById('msgs').innerHTML=''; render(); window.scrollTo(0,0); }
+function irLeccion(mi,li){ vista='leccion'; ir(mi,li); }
+
+function renderTrabajo(){
+  const t = TRABAJOS[trabIdx];
+  const d = diasPara(t.entrega);
+  const etiqueta = d===null ? 'sin fecha de entrega'
+                 : d<0 ? 'plazo vencido'
+                 : (d===0 ? 'se entrega hoy' : 'faltan '+d+' días');
+  document.getElementById('main').innerHTML = `
+    <div class="muted">${t.materia}</div>
+    <h2 style="font-size:23px;margin:6px 0 8px">${t.titulo}</h2>
+    <div class="row" style="margin-bottom:4px">
+      <span class="dias ${d===null||d>10?'lejos':''}">${etiqueta}</span>
+      ${t.entrega?`<span class="muted">entrega: ${fmtFecha(t.entrega)}</span>`:''}
+    </div>
+    ${t.formato?`<div class="nota" style="margin-top:14px">${t.formato}</div>`:''}
+    <div class="barra">
+      <button class="primary" onclick="verDocumento()">Ver documento y exportar</button>
+      ${t.secciones.some(s=>s.modelo||(s.tipo==='tabla'&&s.datos))
+        ? `<button onclick="volcarTodo('${t.id}')">Volcar todo el desarrollo</button>` : ''}
+      <button onclick="limpiarTrabajo('${t.id}')">Vaciar</button>
+      ${t.propio ? `<button onclick="TrabajosNuevos.eliminar('${t.id}')">Eliminar trabajo</button>` : ''}
+      <span class="sp" id="guardado"></span>
+    </div>
+    ${t.secciones.map((s,i)=>pintarSeccion(s,i,t.id)).join('')}
+    <p class="muted" style="margin-top:22px">Todo lo que escribes se guarda solo, en este equipo.
+    Cuando lo tengas, pulsa «Ver documento y exportar» para revisar cómo queda y bajarlo en PDF o Word.</p>`;
+  t.secciones.forEach((s,i)=>{
+    if(s.tipo!=='texto') return;
+    const el=document.getElementById(`ed-${t.id}-${i}`); if(!el) return;
+    const v=dato(t.id,i); if(v) el.innerHTML=v;
+    el.addEventListener('input',()=>setDato(t.id,i,el.innerHTML));
+    el.addEventListener('paste',ev=>pegar(ev,t.id,i,el));
+  });
+}
+
+function pintarSeccion(s,i,tid){
+  if(s.tipo==='nota') return `<div class="nota">${s.texto}</div>`;
+  const botones = [];
+  if(s.orientacion) botones.push(`<button onclick="toggleOrient('or-${tid}-${i}')">No sé por dónde empezar</button>`);
+  if(s.modelo)      botones.push(`<button onclick="verModelo('${tid}',${i})">Ver desarrollo</button>`);
+  if(LM_OK)         botones.push(`<button onclick="revisarIA('${tid}',${i})">Revisar lo que llevo</button>`);
+  const orient =
+    (botones.length ? `<div class="row">${botones.join('')}</div>` : '') +
+    (s.orientacion ? `<div class="orient" id="or-${tid}-${i}">${s.orientacion}</div>` : '') +
+    (s.modelo ? `<div class="modelo" id="mo-${tid}-${i}"></div>` : '');
+  let cuerpo='';
+  if(s.tipo==='texto'){
+    const mat = (TRABAJOS.find(t=>t.id===tid)||{}).materia || '';
+    const teclas = simbolosDe(mat).map(k=>
+      `<button type="button" onclick="insSimbolo('ed-${tid}-${i}','${k}','${tid}',${i})">${k}</button>`).join('');
+    cuerpo=`<div class="edit" id="ed-${tid}-${i}" contenteditable="true" data-ph="${(s.placeholder||'').replace(/"/g,'&quot;')}"></div>
+            <div class="syms">${teclas}</div>`;
+  }else{
+    cuerpo=`<table class="tedit"><tr>${s.columnas.map(c=>`<th>${c}</th>`).join('')}</tr>
+      ${s.filas.map((f,fi)=>`<tr>${f.map((c,ci)=>
+        (s.fijas||[]).includes(ci)
+          ? `<td class="fija">${c}</td>`
+          : `<td><input value="${(dato(tid,i)?.[fi]?.[ci] ?? c ?? '').replace(/"/g,'&quot;')}"
+               oninput="celda('${tid}',${i},${fi},${ci},this.value)"></td>`
+      ).join('')}</tr>`).join('')}</table>`;
+  }
+  return `<div class="sec">
+    <h4>${s.titulo||''}</h4>
+    ${s.ayuda?`<div class="ayuda">${s.ayuda}</div>`:''}
+    ${cuerpo}
+    ${orient}
+    <div id="rev-${tid}-${i}"></div>
+  </div>`;
+}
+
+/* Teclado de símbolos por materia: en el teclado del portátil no están, y
+   copiarlos de internet cada vez es perder el hilo de lo que estás pensando. */
+const SIMBOLOS = {
+  "Lógica Computacional": ['¬','∧','∨','→','↔','⊻','∀','∃','∈','≡','(',')','[',']'],
+  "Algoritmia y Complejidad": ['≤','≥','≠','·','←','∈','Θ','Ω','⌊','⌋','⌈','⌉','²','³','ⁿ','√','∑'],
+  "Cálculo Integral": ['∫','∑','√','π','∞','≤','≥','≠','±','·','×','÷','Δ','∂','′','²','³','→','α','θ']
+};
+function simbolosDe(materia){
+  for(const k in SIMBOLOS) if(materia.startsWith(k.split(' ')[0])) return SIMBOLOS[k];
+  return SIMBOLOS["Lógica Computacional"];
+}
+
+/* Inserta en la posición del cursor, no al final: si estás corrigiendo algo
+   a mitad del texto, el símbolo tiene que caer donde estás mirando. */
+function insSimbolo(edId, s, tid, i){
+  const el = document.getElementById(edId);
+  if(!el) return;
+  el.focus();
+  const sel = window.getSelection();
+  if(sel && sel.rangeCount && el.contains(sel.anchorNode)){
+    const r = sel.getRangeAt(0);
+    r.deleteContents();
+    const nodo = document.createTextNode(s);
+    r.insertNode(nodo);
+    r.setStartAfter(nodo); r.setEndAfter(nodo);
+    sel.removeAllRanges(); sel.addRange(r);
+  } else {
+    el.appendChild(document.createTextNode(s));
+    const r = document.createRange();
+    r.selectNodeContents(el); r.collapse(false);
+    const s2 = window.getSelection(); s2.removeAllRanges(); s2.addRange(r);
+  }
+  setDato(tid, i, el.innerHTML);
+}
+
+function celda(tid,i,fi,ci,v){
+  trabajos[tid]=trabajos[tid]||{};
+  const m=trabajos[tid][i]||{};
+  m[fi]=m[fi]||{}; m[fi][ci]=v;
+  trabajos[tid][i]=m; guardarTrab(); marcaGuardado();
+}
+function toggleOrient(id){ document.getElementById(id).classList.toggle('on'); }
+
+/* Desarrollo de referencia. Se muestra aparte de lo que tú escribas: lo
+   normal es leerlo, cerrarlo y redactarlo con tus palabras. «Volcar» está
+   por si vas justo de tiempo, pero deja el texto tal cual y eso se nota. */
+function verModelo(tid,i){
+  const caja=document.getElementById(`mo-${tid}-${i}`);
+  const s=TRABAJOS.find(t=>t.id===tid).secciones[i];
+  if(caja.classList.contains('on')){ caja.classList.remove('on'); caja.innerHTML=''; return; }
+  caja.classList.add('on');
+  caja.innerHTML = `
+    <div class="row" style="margin:0 0 10px">
+      <b style="font-size:13px;color:var(--warn)">Desarrollo de referencia</b>
+      <button style="margin-left:auto;padding:4px 10px;font-size:12px"
+              onclick="volcarModelo('${tid}',${i})">Volcar al editor</button>
+      <button style="padding:4px 10px;font-size:12px" onclick="verModelo('${tid}',${i})">Cerrar</button>
+    </div>
+    ${s.modelo}`;
+}
+function volcarModelo(tid,i){
+  const s=TRABAJOS.find(t=>t.id===tid).secciones[i];
+
+  // Tabla con mediciones: se rellenan las celdas editables, no el texto.
+  if(s.tipo==='tabla' && s.datos){
+    const fijas = s.fijas||[];
+    const libres = s.columnas.map((_,c)=>c).filter(c=>!fijas.includes(c));
+    s.datos.forEach((fila,fi)=>{
+      fila.forEach((v,k)=>{
+        const ci = libres[k];
+        if(ci===undefined) return;
+        celda(tid,i,fi,ci,v);
+      });
+    });
+    verModelo(tid,i);
+    render();
+    return;
+  }
+
+  const ed=document.getElementById(`ed-${tid}-${i}`);
+  if(!ed) return;
+  if(textoPlano(ed.innerHTML) && !confirm('Ya has escrito algo aquí. ¿Lo reemplazo por el desarrollo?')) return;
+  ed.innerHTML = s.modelo;
+  setDato(tid,i,ed.innerHTML);
+  verModelo(tid,i);
+}
+/* Vuelca de una vez el desarrollo de referencia de todas las secciones. La
+   exportacion a Word y PDF solo recoge lo GUARDADO, no el modelo, asi que sin
+   esto hay que entrar seccion por seccion y pulsar dos veces en cada una.
+   Escribe directo sobre el estado (setDato / celda) en vez de tocar el DOM:
+   asi no depende de que la seccion este pintada y un solo render() al final
+   deja todo visible. */
+function volcarTodo(tid){
+  const t=TRABAJOS.find(x=>x.id===tid);
+  const conModelo=t.secciones
+    .map((s,i)=>({s,i}))
+    .filter(({s})=> s.modelo || (s.tipo==='tabla' && s.datos));
+
+  if(!conModelo.length){
+    alert('Este trabajo todavía no tiene desarrollo de referencia cargado.');
+    return;
+  }
+
+  const hayEscrito=conModelo.some(({s,i})=>{
+    const d=dato(tid,i);
+    if(!d) return false;
+    return s.tipo==='tabla' ? Object.keys(d).length>0 : !!textoPlano(d);
+  });
+  if(hayEscrito && !confirm(
+      'Ya hay contenido escrito en este trabajo.\n\n'+
+      '¿Lo reemplazo por el desarrollo de referencia en las '+conModelo.length+' secciones?')) return;
+
+  conModelo.forEach(({s,i})=>{
+    if(s.tipo==='tabla' && s.datos){
+      const fijas=s.fijas||[];
+      const libres=s.columnas.map((_,c)=>c).filter(c=>!fijas.includes(c));
+      s.datos.forEach((fila,fi)=>fila.forEach((v,k)=>{
+        if(libres[k]!==undefined) celda(tid,i,fi,libres[k],v);
+      }));
+    }else if(s.modelo){
+      setDato(tid,i,s.modelo);
+    }
+  });
+
+  render();
+  alert('Volcadas '+conModelo.length+' secciones.\n\n'+
+        'Revísalas y ajusta lo que quieras con tus palabras antes de exportar: '+
+        'el texto es de referencia, no para entregar tal cual.');
+}
+function limpiarTrabajo(tid){
+  if(!confirm('¿Borrar todo lo escrito en este trabajo?')) return;
+  delete trabajos[tid]; guardarTrab(); render();
+}
+function pegar(ev,tid,i,el){
+  const items=(ev.clipboardData||{}).items||[];
+  for(const it of items){
+    if(it.type && it.type.indexOf('image')===0){
+      ev.preventDefault();
+      const r=new FileReader();
+      r.onload=()=>{ document.execCommand('insertHTML',false,'<img src="'+r.result+'">'); setDato(tid,i,el.innerHTML); };
+      r.readAsDataURL(it.getAsFile());
+      return;
+    }
+  }
+}
+
+function textoPlano(html){
+  const d=document.createElement('div'); d.innerHTML=html||'';
+  return (d.textContent||'').trim();
+}
+async function revisarIA(tid,i){
+  const box=document.getElementById(`rev-${tid}-${i}`);
+  const t=TRABAJOS[trabIdx], s=t.secciones[i];
+  let contenido='';
+  if(s.tipo==='texto') contenido=textoPlano(dato(tid,i));
+  else{
+    const m=dato(tid,i)||{};
+    contenido=Object.keys(m).map(fi=>s.filas[fi][0]+': '+Object.values(m[fi]).join(' / ')).join('\n');
+  }
+  if(!contenido){ box.innerHTML='<div class="fb warn"><b>Todavía no has escrito nada</b>Escribe un primer borrador, aunque sea flojo, y entonces lo reviso.</div>'; return; }
+  box.innerHTML='<div class="ia"><span class="who">IA local</span>revisando…</div>';
+  try{
+    const r=await pedirLM([
+      {role:'system',content:'Eres un tutor universitario. Revisas el borrador de un estudiante en espanol, tuteando, maximo 70 palabras, sin markdown. NUNCA le des la respuesta ni escribas tu la solucion: senala lo que falta o lo que conviene ampliar, y hazle una pregunta que le ayude a seguir solo.'},
+      {role:'user',content:`APARTADO: ${s.titulo}\nQUE SE PIDE: ${textoPlano(s.ayuda)}\n\nBORRADOR DEL ESTUDIANTE:\n${contenido.slice(0,1200)}`}
+    ],220);
+    box.innerHTML=`<div class="ia"><span class="who">IA local · ${MODELO}</span>${escapar(r)}</div>`;
+  }catch(e){
+    box.innerHTML=`<div class="ia"><span class="who">IA local</span>No se pudo revisar (${escapar(e.message)}).</div>`;
+  }
+}
+
+/* ---------- datos del autor para la portada APA ---------- */
+let APA = JSON.parse(localStorage.getItem('tutor_apa') || 'null') || {
+  autor:'', programa:'',
+  institucion:'',
+  profesor:'', ciudad:''
+};
+function guardarAPA(){
+  ['autor','programa','institucion','profesor','ciudad'].forEach(k=>{
+    const el=document.getElementById('apa-'+k); if(el) APA[k]=el.value.trim();
+  });
+  localStorage.setItem('tutor_apa', JSON.stringify(APA));
+  render();
+}
+function formatoDe(tid){ return localStorage.getItem('tutor_fmt_'+tid) || 'profe'; }
+function cambiarFormato(tid,v){ localStorage.setItem('tutor_fmt_'+tid, v); render(); }
+
+/* Secciones de borrador (el codigo fuente, por ejemplo). Se dejan fuera por
+   defecto porque el profesor las pide como archivo adjunto y engordan el
+   documento, pero a veces conviene incluirlas: lo decide quien entrega. */
+function incluyeBorrador(tid){ return localStorage.getItem('tutor_borr_'+tid) === 'si'; }
+function cambiarBorrador(tid,v){ localStorage.setItem('tutor_borr_'+tid, v); render(); }
+
+function hoyLargo(){
+  const m=['enero','febrero','marzo','abril','mayo','junio','julio','agosto',
+           'septiembre','octubre','noviembre','diciembre'];
+  const d=new Date();
+  return d.getDate()+' de '+m[d.getMonth()]+' de '+d.getFullYear();
+}
+
+/* Portada según APA 7 para trabajos de estudiante: título a un tercio de la
+   página, en negrita, y debajo autor, afiliación, curso, profesor y fecha. */
+function portadaAPA(t){
+  /* El rojo va fijo A PROPOSITO: esto se pinta DENTRO de #hoja, que es
+     blanca siempre porque de ahi se captura el PDF. Un color del tema
+     saldria ilegible en la hoja con el tema oscuro puesto. El marcador
+     del final es lo que hace que `revisar_tutor.py` lo deje pasar. */
+  const falta = s => s || '<span style="color:#b91c1c">[completa tus datos]</span>'; /*hoja*/
+  return `<div class="apa-portada">
+    <p class="apa-tit">${t.titulo}</p>
+    <p class="apa-dato">${falta(APA.autor)}</p>
+    <p class="apa-dato">${falta(APA.programa)}, ${falta(APA.institucion)}</p>
+    <p class="apa-dato">${t.materia}</p>
+    <p class="apa-dato">${falta(APA.profesor)}</p>
+    <p class="apa-dato">${hoyLargo()}</p>
+  </div><div class="apa-salto"></div>
+  <p class="apa-tit2">${t.titulo}</p>`;
+}
+
+/* Cuerpo del documento: lo comparten la vista previa, el Word y el PDF.
+   Una sola fuente, para que los tres salgan iguales. */
+function docHTML(tid){
+  const t=TRABAJOS.find(x=>x.id===tid);
+  const apa = formatoDe(tid)==='apa';
+  let c = apa
+    ? portadaAPA(t)
+    : `<h1>${t.titulo}</h1><p><b>${t.materia}</b>${t.entrega?`<br>Fecha de entrega: ${fmtFecha(t.entrega)}`:''}</p><hr>`;
+  t.secciones.forEach((s,i)=>{
+    // Las notas nunca se exportan, y tampoco lo marcado como borrador: hay
+    // secciones que existen para trabajar —el codigo fuente, por ejemplo— pero
+    // que el profesor pide como archivo adjunto, no dentro del documento.
+    if(s.tipo==='nota') return;
+    if(s.noExportar && !incluyeBorrador(tid)) return;
+    c+=`<h2>${s.titulo||''}</h2>`;
+    if(s.tipo==='texto'){
+      c+=`<div>${dato(tid,i)||'<p><i>(pendiente)</i></p>'}</div>`;
+    }else{
+      const m=dato(tid,i)||{};
+      c+=`<table><tr>${s.columnas.map(x=>`<th>${x}</th>`).join('')}</tr>`;
+      s.filas.forEach((f,fi)=>{
+        // Lo escrito manda; si no hay nada escrito, el valor que trae la fila.
+        c+='<tr>'+f.map((x,ci)=>`<td>${(s.fijas||[]).includes(ci)?x:((m[fi]||{})[ci] ?? x ?? '')}</td>`).join('')+'</tr>';
+      });
+      c+='</table>';
+    }
+  });
+  return c;
+}
+const CSS_PROFE = `body{font-family:Calibri,sans-serif;font-size:12pt;line-height:1.5;color:#000}
+h1{font-size:16pt;margin:0 0 6pt}h2{font-size:13pt;margin:16pt 0 5pt}
+table{border-collapse:collapse;width:100%;margin:6pt 0}
+td,th{border:1px solid #444;padding:5pt;font-size:10.5pt;text-align:left}
+th{background:#eee}img{max-width:100%}hr{border:0;border-top:1px solid #999;margin:10pt 0}
+/* Bloques de codigo. A 8,5pt entran 100 caracteres por linea en la caja de la
+   carta; solo una linea del laboratorio la pasa y esa envuelve. Sin pre-wrap el
+   codigo se sale de la hoja y html2pdf lo recorta sin avisar. */
+pre{white-space:pre-wrap;word-break:break-word;font-family:Consolas,"Courier New",monospace;
+    font-size:8.5pt;line-height:1.3;margin:6pt 0;padding:6pt;border:1px solid #bbb;background:#f8f8f8}
+/* Una fila partida entre dos paginas deja media linea de texto arriba. */
+tr{page-break-inside:avoid;break-inside:avoid}
+/* Misma razon que en #hoja: sin esto, en Word la caja no existe. */
+.real{background:#f4f4f2;border-left:3px solid #999;padding:7pt 10pt;margin:9pt 0}
+/* La clase .regla sale diez veces en los trabajos y en Word no heredaba
+   nada: la caja quedaba sin fondo ni borde y se leia como un parrafo mas,
+   perdiendo la distincion entre la regla y el texto corriente.
+   OJO: aqui NO se pueden usar comillas invertidas. Este CSS vive dentro de
+   una plantilla de JavaScript y una sola la cierra: poner .regla entre
+   comillas invertidas en este comentario dejo la pagina en blanco. */
+.regla{background:#eef3f9;border-left:3px solid #4a6f9c;padding:7pt 10pt;margin:9pt 0}
+/* Y lo mismo con el codigo en linea: en Word no hereda nada y saldria igual
+   que el texto, perdiendo la distincion entre el nombre de una variable y la
+   palabra corriente. OJO: este CSS vive dentro de una plantilla de JavaScript,
+   asi que aqui no caben ni comillas invertidas ni interpolaciones: cierran la
+   cadena y el motor se queda sin la mitad de sus funciones. */
+code{font-family:Consolas,"Courier New",monospace;font-size:10.5pt;
+     background:#f0f0ee;border:1px solid #ddd;padding:0 2pt}`;
+
+/* APA 7 para trabajos de estudiante: Times New Roman 12, interlineado doble,
+   sangría de primera línea 1,27 cm y encabezados por niveles. */
+const CSS_APA = `body{font-family:"Times New Roman",Times,serif;font-size:12pt;line-height:2;color:#000}
+p{margin:0;text-indent:1.27cm;text-align:left}
+h2{font-size:12pt;font-weight:bold;text-align:left;margin:0 0 0;text-indent:0}
+.apa-portada{text-align:center;padding-top:5cm}
+.apa-portada p{text-indent:0;margin:0}
+.apa-tit{font-weight:bold;font-size:12pt;margin-bottom:2em!important}
+.apa-dato{margin:0!important}
+.apa-salto{page-break-after:always;break-after:page;height:0}
+.apa-tit2{font-weight:bold;text-align:center;text-indent:0!important;margin:0 0 .5em!important}
+table{border-collapse:collapse;width:100%;margin:12pt 0;line-height:1.2}
+td,th{border:0;border-top:1px solid #000;border-bottom:1px solid #000;padding:5pt;font-size:11pt;text-align:left}
+th{font-weight:bold;border-bottom:1px solid #000}
+img{max-width:100%}hr{display:none}
+pre{white-space:pre-wrap;word-break:break-word;font-family:Consolas,"Courier New",monospace;
+    font-size:8.5pt;line-height:1.25;margin:12pt 0;text-indent:0;padding:0}
+tr{page-break-inside:avoid;break-inside:avoid}
+/* APA no admite cajas sombreadas: aqui .real es un parrafo normal. */
+.real{background:none;border:0;padding:0;margin:0}`;
+
+/* Algunos profesores exigen una fuente concreta —«Arial 11», por ejemplo— que
+   no es la de ninguno de los dos formatos. El trabajo puede traerla en `fuente`
+   y `tamano`, y se aplica encima del formato elegido.
+   El PDF se genera capturando la hoja de la pantalla, no este CSS, así que la
+   fuente se pone además en la propia hoja (ver `fuenteHoja`). */
+function fuenteDe(tid){
+  const t=TRABAJOS.find(x=>x.id===tid);
+  if(!t || !(t.fuente||t.tamano||t.interlineado)) return null;
+  return [t.fuente?'font-family:'+t.fuente:'', t.tamano?'font-size:'+t.tamano:'',
+          t.interlineado?'line-height:'+t.interlineado:''].filter(Boolean).join(';');
+}
+function fuenteHoja(tid){ return fuenteDe(tid) || ''; }
+function cssDe(tid){
+  const base = formatoDe(tid)==='apa' ? CSS_APA : CSS_PROFE;
+  const f=fuenteDe(tid);
+  return base + (f ? `\nbody{${f}}` : '');
+}
+
+function exportarWord(tid){
+  const t=TRABAJOS.find(x=>x.id===tid);
+  const apa = formatoDe(tid)==='apa';
+  // Márgenes: APA exige 1 pulgada (2,54 cm) en los cuatro lados.
+  const pagina = apa
+    ? '@page{size:letter;margin:2.54cm}'
+    : '@page{size:letter;margin:2.5cm}';
+  const doc=`<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="utf-8"><title>${t.titulo}</title><style>${pagina} ${cssDe(tid)}</style></head><body>${docHTML(tid)}</body></html>`;
+  const blob=new Blob(['﻿'+doc],{type:'application/msword'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob); a.download=t.archivo+'.doc';
+  document.body.appendChild(a); a.click();
+  setTimeout(()=>{URL.revokeObjectURL(a.href); a.remove();},1500);
+}
+
+/* Nombre de archivo sin tildes ni signos: WhatsApp y algunos sistemas los
+   rompen al adjuntar. Copiado de la cotización del Broker. */
+function limpio(t){
+  return (t||"").normalize("NFD").replace(/[̀-ͯ]/g,"")
+    .replace(/[^A-Za-z0-9]+/g,"-").replace(/^-+|-+$/g,"");
+}
+
+async function exportarPDF(tid){
+  const b=document.getElementById('bPdf');
+  const hoja=document.getElementById('hoja');
+  if(typeof html2pdf!=="function"){
+    alert('Todavía se está cargando el generador. Espera un segundo y vuelve a intentarlo.');
+    return;
+  }
+  const t=TRABAJOS.find(x=>x.id===tid);
+  b.disabled=true; b.textContent='Generando…';
+
+  // La sombra y el margen son de la vista en pantalla. html2canvas los
+  // dibujaría dentro del PDF: una franja gris alrededor de la hoja.
+  const antes=hoja.style.cssText;
+  hoja.style.boxShadow='none';
+  hoja.style.margin='0';
+  // El margen lo pone el PDF, no la hoja. Antes la hoja llevaba dentro su
+  // relleno de 0,9in y html2pdf la partía a lo largo: solo la primera página
+  // quedaba con margen arriba y la última con margen abajo; de la segunda en
+  // adelante el texto salía pegado al borde del papel. Capturando la hoja ya
+  // sin relleno y declarando el margen en las opciones, las cuatro orillas se
+  // respetan en TODAS las páginas. El ancho de texto no cambia: 8,5 − 2×0,9.
+  const MARGEN=0.9;
+  hoja.style.padding='0';
+  hoja.style.width=(8.5-2*MARGEN)+'in';
+  hoja.style.maxWidth='none';
+  window.scrollTo(0,0);   // html2canvas mide desde el desplazamiento actual
+
+  /* LAS DEMÁS OPCIONES SON LAS DE SMART-WEALTH Y EL BROKER. NO SE LES AÑADE
+   * NADA. Ya se probó a «mejorarlas» con windowWidth, scrollX y scrollY: el
+   * resultado fue un PDF corrido hacia la izquierda, con la franja izquierda
+   * cortada y media página vacía a la derecha. No se le añaden opciones a una
+   * receta que lleva meses funcionando. */
+  try{
+    await html2pdf().set({
+      margin: MARGEN,
+      filename: limpio(t.archivo)+'-'+new Date().toISOString().slice(0,10)+'.pdf',
+      image: { type: "jpeg", quality: 0.92 },
+      html2canvas: { scale: 2, useCORS: true, logging: false },
+      jsPDF: { unit: "in", format: "letter", orientation: "portrait" },
+      pagebreak: { mode: ["css", "legacy"] },
+    }).from(hoja).toContainer().then(()=>{
+      // html2pdf mete el elemento en una capa oculta que RECORTA lo que se
+      // sale. Sin abrirla, el documento aparece cortado por los bordes.
+      const capa=document.querySelector(".html2pdf__overlay");
+      if(capa) capa.style.overflow="visible";
+    }).toCanvas().toPdf().save();
+  }catch(e){
+    alert('No se pudo generar el PDF. Usa «Descargar Word» o el botón de imprimir del navegador y elige «Guardar como PDF».');
+  }finally{
+    hoja.style.cssText=antes;
+    b.disabled=false; b.textContent='Descargar PDF';
+  }
+}
+
+function verDocumento(){ vista='documento'; render(); window.scrollTo(0,0); }
+function volverEditar(){ vista='trabajo'; render(); window.scrollTo(0,0); }
+
+function renderDocumento(){
+  const t=TRABAJOS[trabIdx];
+  const apa = formatoDe(t.id)==='apa';
+  const faltan = apa && (!APA.autor || !APA.profesor);
+  document.getElementById('main').innerHTML=`
+    <div class="barra">
+      <button onclick="volverEditar()">← Volver a editar</button>
+      <button class="primary" id="bPdf" onclick="exportarPDF('${t.id}')">Descargar PDF</button>
+      <button onclick="exportarWord('${t.id}')">Descargar Word</button>
+      <span class="sp">vista previa del entregable</span>
+    </div>
+    ${t.secciones.filter(s=>s.noExportar).length ? `<div class="sec" style="margin-bottom:16px">
+      <h4 style="font-size:14.5px">Material de trabajo</h4>
+      <div class="ayuda" style="margin-top:6px">Estas secciones existen para trabajar y el profesor
+      las pide como archivo adjunto: ${t.secciones.filter(s=>s.noExportar).map(s=>s.titulo).join(' · ')}.</div>
+      <div class="row" style="margin-top:8px">
+        <button class="${incluyeBorrador(t.id)?'':'primary'}" onclick="cambiarBorrador('${t.id}','no')">Dejarlas fuera</button>
+        <button class="${incluyeBorrador(t.id)?'primary':''}" onclick="cambiarBorrador('${t.id}','si')">Incluirlas en el documento</button>
+      </div>
+    </div>` : ''}
+    <div class="sec" style="margin-bottom:16px">
+      <h4 style="font-size:14.5px">Formato del documento</h4>
+      <div class="row" style="margin-top:8px">
+        <button class="${apa?'':'primary'}" onclick="cambiarFormato('${t.id}','profe')">El que pide el profesor</button>
+        <button class="${apa?'primary':''}" onclick="cambiarFormato('${t.id}','apa')">Normas APA 7</button>
+      </div>
+      ${t.formato?`<div class="ayuda" style="margin-top:9px">${t.formato}</div>`:''}
+      ${apa?`
+        <div class="ayuda" style="margin-top:9px">${fuenteDe(t.id)
+          ? 'Portada de estudiante, márgenes de 2,54 cm y sangría de 1,27 cm. La tipografía y el interlineado los manda este trabajo: '+[t.fuente&&t.fuente.split(',')[0], t.tamano, t.interlineado&&'interlineado '+t.interlineado].filter(Boolean).join(' · ')+'.'
+          : 'Times New Roman 12, interlineado doble, márgenes de 2,54 cm, sangría de 1,27 cm y portada de estudiante.'}</div>
+        <div style="margin-top:10px">
+          ${['autor','profesor','programa','institucion','ciudad'].map(k=>`
+            <div style="margin-bottom:7px">
+              <label class="muted" style="font-size:12px;display:block;margin-bottom:3px">${
+                {autor:'Tu nombre completo',profesor:'Nombre del profesor',programa:'Programa',
+                 institucion:'Institución',ciudad:'Ciudad'}[k]}</label>
+              <input type="text" id="apa-${k}" value="${(APA[k]||'').replace(/"/g,'&quot;')}"
+                     style="font-family:inherit" onchange="guardarAPA()">
+            </div>`).join('')}
+        </div>
+        ${faltan?'<div class="fb warn" style="margin-top:8px"><b>Faltan datos</b>Sin nombre y profesor la portada sale incompleta.</div>':''}
+      `:''}
+    </div>
+    <div id="hoja" class="${apa?'apa':''}" style="${fuenteHoja(t.id)}">${docHTML(t.id)}</div>`;
+}
+
+function renderLeccion(){
+  const mod = CURRICULO[modIdx], lec = lecActual();
+
+  /* SIN CONTENIDO TODAVIA, QUE NO REVIENTE.
+   *
+   * En una instalacion nueva CURRICULO esta vacio, asi que `mod` es
+   * undefined y `mod.titulo` lanzaba antes de pintar nada: la pantalla
+   * se quedaba en blanco y el asistente de primera vez no llegaba a
+   * salir. Es lo PRIMERO que ve quien compra el producto.
+   *
+   * `lecActual()` ya estaba escrita para este caso —su comentario nombra
+   * el mismo error— pero aqui no se miraba. Comprobado el 04/11/2026
+   * contra el producto del 27/10: el fallo ya venia de antes. */
+  if(!mod || !lec){
+    document.getElementById('main').innerHTML = `
+      <div class="teoria" style="text-align:center;padding:44px 28px">
+        <h2 style="font-size:21px;margin-bottom:10px">Aun no hay temario</h2>
+        <p class="muted" style="max-width:46ch;margin:0 auto 18px">
+          Carga los PDF de tus materias y el tutor arma con ellos las
+          lecciones, los ejercicios y las fichas de repaso.</p>
+        <button class="primary" onclick="abrirAjustes&&abrirAjustes()">Cargar mis PDF</button>
+      </div>`;
+    pintarBarra();
+    return;
+  }
+  const aviso = LM_OK ? '' : `<div class="err"><b>La IA local no responde.</b> La app funciona igual —los veredictos
+    no dependen de ella—, pero no habrá comentarios personalizados ni chat de dudas.
+    Para activarla, en una terminal: <code>lms server start --cors</code> y luego pulsa Reconectar.</div>`;
+
+  document.getElementById('main').innerHTML = `
+    ${aviso}
+    <div class="muted">${mod.titulo} · ${mod.etiqueta}</div>
+    <h2 style="font-size:23px;margin:6px 0 2px">${lec.titulo}</h2>
+    <div class="prog"><i id="barra"></i></div>
+    <div class="teoria">${lec.teoria}</div>
+    ${lec.profundiza && lec.profundiza.length ? `<div class="afondo">
+      <h3 style="font-size:17px;margin:24px 0 10px">A fondo</h3>
+      ${lec.profundiza.map(b => `<details><summary>${b.titulo}</summary><div>${b.html}</div></details>`).join('')}
+    </div>` : ''}
+    <h3 style="font-size:17px;margin-bottom:12px">Ejercicios</h3>
+    <div id="ejs">${lec.ejercicios.map((e,i)=>pintarEj(e,i,lec.id)).join('')}</div>
+    <div class="row" style="margin-top:26px">
+      ${lecIdx>0||modIdx>0 ? '<button onclick="anterior()">← Anterior</button>':''}
+      ${haySiguiente() ? '<button class="primary" onclick="siguiente()">Siguiente lección →</button>':''}
+    </div>`;
+  pintarBarra();
+  restaurar(lec);
+}
+
+function pintarEj(e,i,lecId){
+  const id = lecId+'-'+i;
+  let cuerpo = '';
+  if(e.tipo==='opcion'){
+    cuerpo = e.opciones.map((o,j)=>
+      `<button class="op" id="op-${id}-${j}" onclick="responderOpcion('${id}',${i},${j})">${o}</button>`).join('');
+  } else if(e.tipo==='practica'){
+    // Lo escrito se recupera al volver; si no hay nada, se parte de la plantilla.
+    const escrito = practicas[id] !== undefined ? practicas[id] : (e.plantilla || '');
+    cuerpo = `
+      ${e.lenguaje ? `<div class="vars">${e.lenguaje}</div>` : ''}
+      <textarea class="prac ${e.prosa ? 'prosa' : ''}" id="tx-${id}" spellcheck="${e.prosa ? 'true' : 'false'}"
+                aria-label="Tu respuesta" oninput="guardarPractica('${id}',this.value)">${escapar(escrito)}</textarea>
+      <div class="row">
+        <button class="primary" onclick="comprobarPractica('${id}',${i})">Comprobar</button>
+        ${e.pistas && e.pistas.length ? `<button onclick="pedirPista('${id}',${i})">Pista</button>` : ''}
+        <button id="sol-${id}" onclick="verSolucion('${id}',${i})" disabled
+                title="Se desbloquea al comprobar tu primer intento">Ver solución comentada</button>
+      </div>
+      <div id="pi-${id}"></div>
+      <div id="so-${id}"></div>`;
+  } else {
+    cuerpo = `
+      ${e.variables?`<div class="vars">${e.variables}</div>`:''}
+      <input type="text" id="in-${id}" placeholder="escribe tu fórmula…" autocomplete="off"
+             onkeydown="if(event.key==='Enter')responderFormula('${id}',${i})">
+      <div class="syms">
+        ${['¬','∧','∨','→','↔','(',')'].map(s=>`<button type="button" onclick="ins('in-${id}','${s}')">${s}</button>`).join('')}
+      </div>
+      <div class="row"><button class="primary" onclick="responderFormula('${id}',${i})">Comprobar</button></div>`;
+  }
+  return `<div class="ej" id="ej-${id}">
+    <div class="ejnum">Ejercicio ${i+1} de ${CURRICULO[modIdx].lecciones[lecIdx].ejercicios.length}</div>
+    <div class="enun">${e.enunciado}</div>
+    ${cuerpo}
+    <div id="fb-${id}"></div>
+    <div id="ia-${id}"></div>
+  </div>`;
+}
+
+/* ---------- práctica: escribir código o un texto y comprobarlo ----------
+   El veredicto lo dan los criterios del ejercicio, igual que en las fórmulas:
+   expresiones regulares que buscan lo que no puede faltar, o lo que no debe
+   aparecer (`no: true`). La IA, si está encendida, solo comenta.
+   La solución comentada se desbloquea al comprobar un intento propio: primero
+   se piensa y se escribe; después se compara. */
+let practicas = {};
+try { practicas = JSON.parse(localStorage.getItem('tutor_prac') || '{}'); } catch (err) { practicas = {}; }
+
+function guardarPractica(id, valor){
+  practicas[id] = valor;
+  try { localStorage.setItem('tutor_prac', JSON.stringify(practicas)); } catch (err) {}
+}
+
+function evaluarCriterios(e, texto){
+  return (e.criterios || []).map(c => {
+    c.re.lastIndex = 0;                     // una expresión con /g recuerda dónde se quedó
+    const aparece = c.re.test(texto);
+    return { texto: c.texto, cumple: c.no ? !aparece : aparece };
+  });
+}
+
+function comprobarPractica(id, i){
+  const lec = lecActual(), e = lec.ejercicios[i];
+  const texto = document.getElementById('tx-' + id).value || '';
+  if (texto.trim().length < (e.minimo || 20) || texto.trim() === (e.plantilla || '').trim()) {
+    mostrarFb(id, 'warn', 'Escribe tu intento primero',
+      'Hace falta una respuesta propia para compararla con los criterios. Modificar la plantilla también cuenta.');
+    return;
+  }
+  const res = evaluarCriterios(e, texto);
+  const ok = res.every(r => r.cumple);
+  const cumplidos = res.filter(r => r.cumple).length;
+  const lista = '<ul class="crit">' + res.map(r => `<li class="${r.cumple ? 'si' : 'no'}">${r.texto}</li>`).join('') + '</ul>';
+  mostrarFb(id, ok ? 'ok' : 'bad',
+    ok ? 'Cumple todos los criterios' : `Cumple ${cumplidos} de ${res.length} criterios`,
+    (ok ? (e.explicacion || '') : 'Corrige los marcados con ✗. Si te atascas, pide una pista antes de mirar la solución.') + lista);
+  document.getElementById('ej-' + id).className = 'ej ' + (ok ? 'ok' : 'bad');
+  document.getElementById('sol-' + id).disabled = false;
+  marcar(lec.id, i, ok);
+  comentarIA(id, e, texto.slice(0, 1500), ok);
+}
+
+/* Las pistas se dan de una en una y se acumulan: la primera orienta, la última
+   casi resuelve. Así cada quien pide solo la ayuda que necesita. */
+const pistasDadas = {};
+function pedirPista(id, i){
+  const e = lecActual().ejercicios[i];
+  const n = Math.min((pistasDadas[id] || 0) + 1, e.pistas.length);
+  pistasDadas[id] = n;
+  document.getElementById('pi-' + id).innerHTML =
+    `<div class="fb warn"><b>Pista ${n} de ${e.pistas.length}</b>` +
+    e.pistas.slice(0, n).map(p => `<div style="margin-top:5px">${p}</div>`).join('') + '</div>';
+}
+
+function verSolucion(id, i){
+  const e = lecActual().ejercicios[i], caja = document.getElementById('so-' + id);
+  caja.innerHTML = caja.innerHTML ? '' :
+    `<div class="solucion"><b style="display:block;margin-bottom:8px">Solución comentada</b>${e.solucion || ''}</div>`;
+}
+
+function ins(inputId,s){
+  const el = document.getElementById(inputId);
+  const a = el.selectionStart||el.value.length;
+  el.value = el.value.slice(0,a)+s+el.value.slice(el.selectionEnd||a);
+  el.focus(); el.selectionStart = el.selectionEnd = a+s.length;
+}
+
+function bloquear(id,e,elegida){
+  if(e.tipo!=='opcion') return;
+  e.opciones.forEach((_,j)=>{
+    const b = document.getElementById(`op-${id}-${j}`);
+    if(!b) return;
+    b.disabled = true;
+    if(j===e.correcta) b.className='op right';
+    else if(j===elegida) b.className='op wrong';
+  });
+}
+
+function responderOpcion(id,i,j){
+  const lec = lecActual(), e = lec.ejercicios[i];
+  const ok = j===e.correcta;
+  bloquear(id,e,j);
+  mostrarFb(id,ok?'ok':'bad', ok?'Correcto':'No es esa', ok?e.explicacion:(e.errorComun+'<br><br><b style="display:inline">La razón:</b> '+e.explicacion));
+  document.getElementById(`ej-${id}`).className = 'ej '+(ok?'ok':'bad');
+  marcar(lec.id,i,ok);
+  comentarIA(id, e, e.opciones[j], ok);
+}
+
+function responderFormula(id,i){
+  const lec = lecActual(), e = lec.ejercicios[i];
+  const el = document.getElementById('in-'+id);
+  const val = el.value.trim();
+  if(!val){ mostrarFb(id,'warn','Escribe algo primero','Necesitas una fórmula para poder comprobarla.'); return; }
+  const v = validarFormula(val,e);
+  if(v.estado==='ok'){
+    mostrarFb(id,'ok','Correcto',e.explicacion);
+    document.getElementById(`ej-${id}`).className='ej ok';
+    marcar(lec.id,i,true);
+  }else if(v.estado==='vars'){
+    mostrarFb(id,'warn','La estructura es correcta, los nombres no',
+      'Agrupaste y conectaste bien, pero usaste letras distintas a las del enunciado. Reescríbela con las variables que se te dan arriba: en un examen el diccionario de variables es parte de la respuesta.');
+    document.getElementById(`ej-${id}`).className='ej';
+  }else{
+    mostrarFb(id,'bad','Todavía no',e.errorComun);
+    document.getElementById(`ej-${id}`).className='ej bad';
+    marcar(lec.id,i,false);
+  }
+  if(v.estado!=='vars') comentarIA(id,e,val,v.estado==='ok');
+}
+
+function mostrarFb(id,tipo,titulo,txt){
+  document.getElementById('fb-'+id).innerHTML = `<div class="fb ${tipo}"><b>${titulo}</b>${txt}</div>`;
+}
+
+async function comentarIA(id,e,respuesta,ok){
+  const box = document.getElementById('ia-'+id);
+  if(!LM_OK){ box.innerHTML=''; return; }
+  box.innerHTML = '<div class="ia"><span class="who">IA local</span>escribiendo…</div>';
+  const sys = 'Eres un tutor universitario exigente. Escribes en espanol, tuteando, '
+    + 'maximo 45 palabras, sin markdown, sin listas. PROHIBIDO felicitar, elogiar o usar '
+    + 'exclamaciones: el estudiante quiere entender, no que le den la razon. Vas directo al '
+    + 'contenido. El veredicto YA esta decidido por el sistema y NO puedes cambiarlo.';
+  const usr = `EJERCICIO: ${e.enunciado.replace(/<[^>]+>/g,'')}
+RESPUESTA DEL ESTUDIANTE: ${respuesta}
+VEREDICTO YA DECIDIDO: ${ok?'CORRECTO':'INCORRECTO'}
+${ok
+ ? 'Acerto: da el acierto por hecho y NO lo comentes. Aporta UNA cosa nueva que no estaba en el enunciado: un matiz que se le puede escapar, el error vecino que suele cometerse en este mismo punto, o donde le va a reaparecer este concepto mas adelante. Empieza por el contenido, sin preambulo.'
+ : 'Senala en una frase donde esta el fallo conceptual, sin darle la respuesta. Termina con una pregunta concreta que le haga encontrarla solo.'}`;
+  try{
+    const t = await pedirLM([{role:'system',content:sys},{role:'user',content:usr}],150);
+    box.innerHTML = t ? `<div class="ia"><span class="who">IA local · ${MODELO}</span>${escapar(t)}</div>` : '';
+  }catch(err){
+    box.innerHTML = `<div class="ia"><span class="who">IA local</span>No se pudo generar el comentario (${escapar(err.message)}).</div>`;
+  }
+}
+function escapar(s){ return String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+
+function restaurar(lec){
+  const p = progreso[lec.id]||{};
+  Object.keys(p).forEach(i=>{
+    const e = lec.ejercicios[i]; if(!e) return;
+    const id = lec.id+'-'+i;
+    // Si ya hubo un intento, la solución comentada sigue desbloqueada al volver.
+    if(e.tipo==='practica'){ const s = document.getElementById('sol-'+id); if(s) s.disabled = false; }
+    if(p[i]==='ok'){
+      document.getElementById(`ej-${id}`)?.classList.add('ok');
+      mostrarFb(id,'ok','Ya resuelto',e.explicacion);
+      if(e.tipo==='opcion') bloquear(id,e,e.correcta);
+    }
+  });
+}
+
+function haySiguiente(){
+  return lecIdx < CURRICULO[modIdx].lecciones.length-1 || modIdx < CURRICULO.length-1;
+}
+function siguiente(){
+  if(lecIdx < CURRICULO[modIdx].lecciones.length-1) ir(modIdx,lecIdx+1);
+  else if(modIdx < CURRICULO.length-1) ir(modIdx+1,0);
+}
+function anterior(){
+  if(lecIdx>0) ir(modIdx,lecIdx-1);
+  else if(modIdx>0) ir(modIdx-1, CURRICULO[modIdx-1].lecciones.length-1);
+}
+
+/* ---------- chat de dudas ---------- */
+let historial = [];
+function toggleChat(){ document.getElementById('chat').classList.toggle('on'); }
+function burbuja(rol,txt){
+  const d = document.createElement('div');
+  d.className = 'm '+(rol==='user'?'u':'a');
+  d.textContent = txt;
+  document.getElementById('msgs').appendChild(d);
+  d.scrollIntoView({block:'end'});
+  return d;
+}
+async function enviarChat(ev){
+  ev.preventDefault();
+  const inp = document.getElementById('chatTxt');
+  const q = inp.value.trim(); if(!q) return;
+  inp.value=''; burbuja('user',q);
+  if(!LM_OK){ burbuja('a','La IA local no está conectada. Arranca el servidor con "lms server start --cors" y pulsa Reconectar.'); return; }
+  const pensando = burbuja('a','…');
+  const lec = (vista==='leccion') ? lecActual() : {titulo:'consulta libre', teoria:''};
+  let contexto = (lec.teoria||'').replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').slice(0,700);
+
+  // Material real del campus relacionado con la pregunta: la IA responde con
+  // el temario de UNIR en vez de improvisar con lo que crea recordar.
+  const hits = buscarTemario(q + ' ' + lec.titulo, 3);
+  if(hits.length){
+    contexto += '\n\nDEL TEMARIO OFICIAL:\n' +
+      hits.map(h=>`(${h.asig}, Tema ${h.n}) ${h.texto.slice(0,700)}`).join('\n---\n');
+  }
+  historial.push({role:'user',content:q});
+  try{
+    const t = await pedirLM([
+      {role:'system',content:`Eres un tutor universitario exigente. Respondes en espanol, tuteando, claro y breve (maximo 90 palabras), sin markdown. NUNCA resuelves tareas completas: das pistas y explicas conceptos. PROHIBIDO elogiar, felicitar o usar exclamaciones; si el estudiante dice algo impreciso, corrigelo aunque vaya bien encaminado. Explica el PORQUE, no solo el que. Apoyate en el TEMARIO OFICIAL que se te da; si algo no esta ahi, dilo en vez de inventarlo. Tema actual: ${lec.titulo}. Material: ${contexto}`},
+      ...historial.slice(-6)
+    ],300);
+    pensando.textContent = t || '(sin respuesta)';
+    historial.push({role:'assistant',content:t});
+  }catch(err){
+    pensando.textContent = 'Error al contactar la IA local: '+err.message;
+  }
+}
+
+/* ================= TEMARIO REAL DEL CAMPUS =================
+   425 pasajes extraidos del campus de UNIR. Sirven para dos cosas:
+   buscar, y darle a la IA local material de verdad en vez de que improvise. */
+let TEMARIO = null;
+/* Quien necesite saber si el temario ya cargó espera ESTO, no un
+ * `setTimeout`. Con un plazo fijo se acierta en la máquina donde se
+ * probó y se falla en la del alumno, que puede ser más lenta — y el
+ * fallo es feo: el asistente de primera vez tapando un tutor que sí
+ * tiene contenido. */
+let temarioListo;
+
+/* DE DONDE SALE EL TEMARIO — DOS SITIOS, EN ESTE ORDEN.
+ *
+ * 1. `contenido.json`, como siempre. Es el de Nicolás, sacado del campus de
+ *    UNIR. Si está, se usa y aquí no cambia absolutamente nada.
+ *
+ * 2. Si no está —o si `fetch` falla porque la página se abrió con doble clic
+ *    desde el disco, que es lo que hace `file://`— se mira el almacén del
+ *    alumno: lo que él mismo cargó desde sus PDF.
+ *
+ * ESE `fetch` ERA LA UNICA RAZON DE NECESITAR PYTHON. `file://` lo bloquea
+ * por CORS, y por eso `iniciar.bat` levanta un servidor web. Con el respaldo
+ * del almacén, una instalación nueva abre con doble clic y sin instalar nada.
+ *
+ * El orden importa: primero el archivo. Así esta carpeta sigue arrancando
+ * igual que ayer, con las mismas 425 pasajes, y el cambio solo se nota donde
+ * antes no había nada.
+ */
+temarioListo = (async () => {
+  try {
+    const r = await fetch('contenido.json');
+    if (r.ok) { TEMARIO = await r.json(); marcaTemario(); return; }
+  } catch (e) { /* sin servidor o sin archivo: se prueba el almacén */ }
+
+  if (typeof Almacen === 'undefined') { TEMARIO = null; return; }
+  try {
+    const pasajes = await Almacen.todosLosPasajes();
+    if (!pasajes.length) { TEMARIO = null; return; }
+    /* SE COPIA LA FORMA EXACTA DE `contenido.json`, campo por campo.
+     *
+     *   { clave, nombre, etiqueta, indice: [títulos],
+     *     temas: [ { n, titulo, pasajes: ["texto", …] } ], videos: [] }
+     *
+     * Los pasajes son CADENAS y viven dentro de `temas`, no al nivel de la
+     * materia. El primer intento los puso arriba y como objetos: el buscador
+     * no habría encontrado ni una línea, y el fallo no se vería hasta que un
+     * alumno buscara algo y no saliera nada — sin ningún error en pantalla.
+     *
+     * Por eso se replica el formato en vez de inventar uno «más limpio»: lo
+     * que ya funciona manda, y aquí lo que funciona es lo que el buscador y
+     * el chat saben leer.
+     */
+    const porMateria = new Map();
+    for (const p of pasajes) {
+      if (!porMateria.has(p.materia)) {
+        porMateria.set(p.materia, {
+          clave: p.materia,
+          nombre: p.nombreMateria || p.materia,
+          etiqueta: 'cargada por ti',
+          indice: [],
+          temas: [{ n: 1, titulo: p.nombreMateria || p.materia, pasajes: [] }],
+          videos: [],
+        });
+      }
+      const m = porMateria.get(p.materia);
+      m.indice.push(p.titulo);
+      // El título va dentro del texto, como en los del campus: así el
+      // buscador lo encuentra tanto por el epígrafe como por el contenido.
+      m.temas[0].pasajes.push(p.titulo + '\n\n' + p.texto);
+    }
+    TEMARIO = [...porMateria.values()];
+    marcaTemario();
+  } catch (e) {
+    console.warn('[tutor] no se pudo cargar el temario:', e);
+    TEMARIO = null;
+  }
+
+  /* ── UN `try` APARTE, Y NO ES UN DETALLE DE ESTILO ──────────────────────
+   *
+   * Esto estaba dentro del `try` de arriba, y el mismo `catch` ponía
+   * `TEMARIO = null`. Resultado medido: el temario cargaba bien, algo fallaba
+   * aquí abajo, y el catch BORRABA lo que ya funcionaba. El alumno se
+   * quedaba con sus lecciones pero sin buscador, y no había ni un error en
+   * pantalla que lo explicara.
+   *
+   * Son dos cosas independientes: si las lecciones generadas fallan, el
+   * temario tiene que seguir en pie — es la mitad del valor del tutor.
+   */
+  try {
+    /* LAS LECCIONES Y FICHAS QUE SE ARMARON DEL TEMARIO.
+     *
+     * Se meten en CURRICULO y FICHAS, que son las mismas variables que usa la
+     * carpeta de Nicolás. Así el tutor pinta una lección generada exactamente
+     * igual que una escrita a mano: mismo recorrido, mismo corrector, mismo
+     * panel. No hay dos caminos que mantener.
+     *
+     * Va después del temario a propósito: si esto fallara, el alumno se queda
+     * al menos con su buscador y su chat, que es la mitad del valor.
+     */
+    const gen = await Almacen.ajuste('generado');
+    if (gen && typeof CURRICULO !== 'undefined') {
+      for (const m of Object.values(gen)) {
+        if (!m.lecciones?.length) continue;
+        CURRICULO.push({
+          id: 'gen-' + m.materia.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+          titulo: m.materia,
+          etiqueta: 'de tu temario',
+          resumen: `${m.lecciones.length} lecciones armadas a partir de los PDF `
+            + 'que cargaste. Cada una dice de qué parte salió.',
+          lecciones: m.lecciones,
+        });
+        if (typeof FICHAS !== 'undefined' && m.fichas) {
+          Object.assign(FICHAS, m.fichas);
+        }
+      }
+      if (typeof render === 'function') render();
+    }
+  } catch (e) {
+    // Se dice en la consola en vez de tragárselo: si las lecciones generadas
+    // no se pintan, hay que poder saber por qué sin adivinar.
+    console.warn('[tutor] no se pudieron cargar las lecciones generadas:', e);
+  }
+})();
+
+function marcaTemario(){
+  const b=document.getElementById('btnBuscar');
+  if(!b||!TEMARIO) return;
+  const n=TEMARIO.reduce((a,x)=>a+x.temas.reduce((s,t)=>s+t.pasajes.length,0),0);
+  b.title = n+' pasajes del campus disponibles';
+}
+
+/* Busqueda por solapamiento de terminos. Sencilla y suficiente para 425 pasajes. */
+function buscarTemario(q, tope){
+  if(!TEMARIO || !q) return [];
+  const limpia = s => s.toLowerCase()
+      .normalize('NFD').replace(/[̀-ͯ]/g,'')
+      .replace(/[^a-z0-9ñ\s]/g,' ');
+  const term = limpia(q).split(/\s+/).filter(t=>t.length>2);
+  if(!term.length) return [];
+  const res=[];
+  TEMARIO.forEach(a=>a.temas.forEach(t=>t.pasajes.forEach((p,i)=>{
+    const txt=limpia(p);
+    let punt=0;
+    term.forEach(w=>{
+      const veces=(txt.match(new RegExp('\\b'+w,'g'))||[]).length;
+      if(veces) punt += 1 + Math.min(veces,4)*0.4;
+    });
+    if(limpia(t.titulo).includes(term[0])) punt += 1.5;
+    if(punt>0) res.push({punt, asig:a.nombre, clave:a.clave, tema:t.titulo, n:t.n, i, texto:p});
+  })));
+  return res.sort((a,b)=>b.punt-a.punt).slice(0, tope||12);
+}
+
+function verBuscador(){ vista='buscar'; render(); setTimeout(()=>document.getElementById('qBusca')?.focus(),50); }
+
+function renderBuscador(){
+  const q=(document.getElementById('qBusca')?.value)||buscaUltima||'';
+  const r=q?buscarTemario(q,15):[];
+  /* LAS CIFRAS SE CUENTAN, NO SE ESCRIBEN.
+   *
+   * Aquí decía «tus tres asignaturas» y «29 temas», que eran los números de
+   * Nicolás cuando se escribió la pantalla. Dos problemas:
+   *
+   *   · Ya era falso para él: tiene SEIS materias, no tres.
+   *   · En el tutor que se vende no significa nada — cada estudiante carga
+   *     los PDF de su carrera y tendrá los suyos.
+   *
+   * Es la misma familia que `SIN_CLASIFICAR` en el Broker: un número escrito
+   * a mano al lado del dato que lo contradice. Se cuenta y se acabó. */
+  const _mats = Array.isArray(TEMARIO) ? TEMARIO.length : 0;
+  const _temas = Array.isArray(TEMARIO)
+    ? TEMARIO.reduce((a,x)=>a+(x.temas?x.temas.length:0),0) : 0;
+  const _pasajes = Array.isArray(TEMARIO)
+    ? TEMARIO.reduce((a,x)=>a+x.temas.reduce((s,t)=>s+t.pasajes.length,0),0) : 0;
+  const _plural = (n,uno,varios)=>`${n} ${n===1?uno:varios}`;
+  document.getElementById('main').innerHTML=`
+    <div class="muted">${_mats?`Temario completo de ${_plural(_mats,'asignatura','asignaturas')}`:'Temario'}</div>
+    <h2 style="font-size:23px;margin:6px 0 4px">Buscar en el temario</h2>
+    <p class="ayuda" style="margin-bottom:14px">${_pasajes
+      ? `Lo que hay aquí es el contenido real de tus materias, no los PDF:
+         ${_plural(_pasajes,'pasaje','pasajes')} de ${_plural(_temas,'tema','temas')}.`
+      : 'Aquí se busca dentro del contenido de tus materias.'}</p>
+    <div class="row" style="margin-bottom:18px">
+      <input type="text" id="qBusca" value="${q.replace(/"/g,'&quot;')}" placeholder="derivada, NAND, forma canónica, quicksort…"
+             style="flex:1;min-width:220px;font-family:inherit" onkeydown="if(event.key==='Enter'){buscaUltima=this.value;renderBuscador();}">
+      <button class="primary" onclick="buscaUltima=document.getElementById('qBusca').value;renderBuscador()">Buscar</button>
+    </div>
+    ${!TEMARIO?`<div class="nota">Todavía no hay temario cargado.
+       Ve a <b>Ajustes</b> y carga los PDF de tus materias: de ahí salen este
+       buscador, las lecciones y las fichas.
+       <span class="muted" style="display:block;margin-top:6px;font-size:12.5px">
+       Si tu carpeta sí tenía un <code>contenido.json</code>, entonces falta o
+       no se pudo leer.</span></div>`:''}
+    ${q&&!r.length?'<div class="nota">Sin resultados para «'+escapar(q)+'».</div>':''}
+    ${r.map(x=>`
+      <div class="sec">
+        <div class="muted" style="font-size:12.5px">${x.asig} · Tema ${x.n}</div>
+        <h4 style="font-size:14.5px;margin:3px 0 8px">${escapar(x.tema)}</h4>
+        <div style="font-size:14.5px;line-height:1.65;white-space:pre-wrap">${resaltar(x.texto,q)}</div>
+      </div>`).join('')}`;
+  const el=document.getElementById('qBusca');
+  if(el){ el.value=q; el.setSelectionRange(q.length,q.length); }
+}
+let buscaUltima='';
+function resaltar(texto,q){
+  let h=escapar(texto);
+  q.split(/\s+/).filter(w=>w.length>2).forEach(w=>{
+    h=h.replace(new RegExp('('+w.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+')','gi'),
+      '<mark style="background:var(--acc-bg);color:var(--acc);padding:0 2px;border-radius:3px">$1</mark>');
+  });
+  return h;
+}
+
+/* ================= FICHAS DE REPASO (contextuales) ================= */
+let fichaActiva = null, fichasTodas = false;
+
+/* Muestra solo las fichas que tienen sentido en la lección abierta.
+   En lógica no aparece factorización; en cálculo no aparece complejidad. */
+function pintarFichas(id){
+  const box=document.getElementById('fichaBox');
+  const rel=(typeof FICHAS_CTX!=='undefined' && FICHAS_CTX[id]) || [];
+  if(!rel.length && !fichasTodas){ box.style.display='none'; return; }
+  box.style.display='';
+  const lista = fichasTodas ? Object.keys(FICHAS) : rel;
+  document.getElementById('fichaTit').textContent =
+    fichasTodas ? 'Todas las fichas' : 'Fichas para esta lección';
+  if(!lista.includes(fichaActiva)) fichaActiva = lista[0] || null;
+  document.getElementById('fichaChips').innerHTML =
+    lista.map(k=>`<button class="chip ${k===fichaActiva?'on':''}" onclick="verFicha('${k}')">${FICHAS[k].corto}</button>`).join('')
+    + `<button class="chip alt" onclick="togTodas()">${fichasTodas?'← solo las de esta lección':'ver todas'}</button>`;
+  pintarFichaCont();
+}
+function verFicha(k){ fichaActiva=k; pintarFichas(vistaId()); }
+function togTodas(){ fichasTodas=!fichasTodas; pintarFichas(vistaId()); }
+function pintarFichaCont(){
+  const c=document.getElementById('fichaCont');
+  c.innerHTML = fichaActiva && FICHAS[fichaActiva]
+    ? `<div style="margin-top:6px"><b style="color:var(--tx)">${FICHAS[fichaActiva].titulo}</b>${FICHAS[fichaActiva].html}</div>` : '';
+}
+
+/* Id de lo que se está viendo ahora, para el apoyo y las fichas. */
+function vistaId(){
+  if(vista==='trabajo')  return TRABAJOS[trabIdx].id;
+  if(vista==='leccion')  return (lecActual()||{}).id || null;
+  return null;
+}
+
+/* La calculadora se repliega sola donde no aporta, salvo que la hayas
+   abierto o cerrado tú: entonces mando yo, no el contexto. */
+let calcManual=false;
+function ajustarCalcCtx(id){
+  const box=document.getElementById('calcBox');
+  const util = id && typeof CALC_CTX!=='undefined' && CALC_CTX.has(id);
+  box.classList.toggle('dim', !util);
+  if(calcManual) return;
+  const c=document.getElementById('calcCuerpo');
+  const abierta = c.style.display!=='none';
+  if(util!==abierta) togCalc(true);
+}
+
+/* ================= DIAGNÓSTICO ================= */
+function verDiagnostico(){ vista='diag'; render(); window.scrollTo(0,0); }
+
+function analizar(){
+  const mods=[];
+  CURRICULO.forEach(m=>{
+    const ls=[]; let ok=0,mal=0,tot=0;
+    m.lecciones.forEach(l=>{
+      const p=progreso[l.id]||{};
+      const a=Object.values(p).filter(v=>v==='ok').length;
+      const f=Object.values(p).filter(v=>v==='bad').length;
+      ok+=a; mal+=f; tot+=l.ejercicios.length;
+      const fallados=Object.keys(p).filter(i=>p[i]==='bad')
+        .map(i=>l.ejercicios[i]).filter(Boolean);
+      ls.push({lec:l, ok:a, mal:f, total:l.ejercicios.length, fallados});
+    });
+    mods.push({mod:m, ls, ok, mal, tot});
+  });
+  return mods;
+}
+
+function renderDiagnostico(){
+  const d=analizar();
+  const totOk=d.reduce((a,m)=>a+m.ok,0), totMal=d.reduce((a,m)=>a+m.mal,0);
+  const totEj=d.reduce((a,m)=>a+m.tot,0);
+  const sinTocar=d.filter(m=>m.ok+m.mal===0);
+  const flojos=[];
+  d.forEach(m=>m.ls.forEach(l=>{ if(l.mal>0) flojos.push({m,l}); }));
+
+  let cuerpo='';
+  if(totOk+totMal===0){
+    cuerpo=`<div class="nota">Todavía no has respondido ningún ejercicio, así que no hay nada
+      que diagnosticar. Empieza por «Proposiciones simples y compuestas» y vuelve aquí cuando
+      lleves un par de lecciones.</div>`;
+  } else {
+    cuerpo=`
+    <div class="sec">
+      <h4>Dónde necesitas refuerzo</h4>
+      ${flojos.length ? `
+        <p class="ayuda">Estas son las lecciones donde fallaste al menos una vez. No es una
+        nota: es la lista de lo que conviene repasar antes del examen.</p>
+        ${flojos.map(({m,l})=>`
+          <div style="border-left:3px solid var(--bad);padding:8px 12px;margin-bottom:10px;background:var(--bad-bg);border-radius:0 6px 6px 0">
+            <b>${l.lec.titulo}</b> <span class="muted">· ${m.mod.titulo}</span><br>
+            <span style="font-size:13.5px">${l.mal} fallo${l.mal>1?'s':''} de ${l.total} ejercicios.</span>
+            ${l.fallados.length?`<div style="font-size:13px;margin-top:6px;opacity:.9">
+              Concepto a repasar: ${l.fallados.map(e=>'«'+textoPlano(e.enunciado).slice(0,70)+'…»').join(' · ')}</div>`:''}
+            <div style="margin-top:8px"><button style="padding:4px 10px;font-size:12.5px"
+              onclick="irPorId('${l.lec.id}')">Repasar esta lección</button></div>
+          </div>`).join('')}`
+      : `<p class="ayuda">No has fallado ningún ejercicio de los que respondiste. Eso está bien,
+         pero significa que el diagnóstico todavía no tiene información suficiente: sigue avanzando
+         a lecciones nuevas para que aparezcan tus puntos flojos reales.</p>`}
+    </div>
+
+    <div class="sec">
+      <h4>Cobertura</h4>
+      <p class="ayuda">Cuánto has tocado de cada módulo. Lo que está en gris no lo has empezado.</p>
+      ${d.map(m=>{
+        const hechos=m.ok+m.mal, pct=Math.round(100*hechos/Math.max(1,m.tot));
+        return `<div style="margin-bottom:11px">
+          <div style="display:flex;font-size:13.5px"><b>${m.mod.titulo}</b>
+            <span class="muted" style="margin-left:auto">${hechos} de ${m.tot}${m.mal?' · '+m.mal+' fallo'+(m.mal>1?'s':''):''}</span></div>
+          <div class="prog" style="margin:5px 0 0"><i style="width:${pct}%;background:${m.mal>0?'var(--warn)':'var(--ok)'}"></i></div>
+        </div>`;
+      }).join('')}
+    </div>
+
+    ${sinTocar.length?`<div class="nota"><b>Sin empezar:</b> ${sinTocar.map(m=>m.mod.titulo).join(' · ')}.</div>`:''}
+
+    <div class="sec">
+      <h4>Pásame el diagnóstico</h4>
+      <p class="ayuda">Si quieres que yo lo analice en el chat, copia este resumen y pégamelo.</p>
+      <button class="primary" onclick="copiarDiag()">Copiar resumen</button>
+      <span id="copiado" class="muted" style="margin-left:10px"></span>
+    </div>`;
+  }
+
+  document.getElementById('main').innerHTML=`
+    <div class="muted">Progreso guardado en este equipo</div>
+    <h2 style="font-size:23px;margin:6px 0 14px">Mi diagnóstico</h2>
+    <div class="row" style="margin-bottom:18px">
+      <span class="dias ${totMal?'':'lejos'}">${totOk} aciertos · ${totMal} fallos · ${totEj} ejercicios en total</span>
+    </div>
+    ${cuerpo}`;
+}
+
+function irPorId(id){
+  CURRICULO.forEach((m,mi)=>m.lecciones.forEach((l,li)=>{ if(l.id===id) ir(mi,li); }));
+}
+function copiarDiag(){
+  const d=analizar();
+  let t='Diagnóstico del tutor\n\n';
+  d.forEach(m=>{
+    t+=`${m.mod.titulo}: ${m.ok+m.mal}/${m.tot} respondidos, ${m.mal} fallos\n`;
+    m.ls.forEach(l=>{ if(l.mal>0) t+=`  - falló en «${l.lec.titulo}» (${l.mal} de ${l.total})\n`; });
+  });
+  navigator.clipboard.writeText(t).then(()=>{
+    document.getElementById('copiado').textContent='copiado';
+    setTimeout(()=>{const e=document.getElementById('copiado'); if(e)e.textContent='';},2000);
+  });
+}
+
+/* ================= CALCULADORA GRÁFICA ================= */
+const COLS = ['#378ADD','#D85A30','#1D9E75'];
+const CALC = { fs:[{txt:'',color:COLS[0]},{txt:'',color:COLS[1]},{txt:'',color:COLS[2]}],
+               cx:0, cy:0, esc:0.055, pts:[], sombra:null };
+let G=null, cv=null;
+
+function initCalc(){
+  cv=document.getElementById('cv');
+  document.getElementById('calcFs').innerHTML = CALC.fs.map((f,i)=>
+    `<div class="fx"><span class="sw" style="background:${f.color}"></span>
+      <input id="fx${i}" placeholder="${i===0?'-x^2+6x-4   ó   f(x)=…':(i===1?'x+2   ó   int(f(x),2,3)':'y una tercera…')}"
+             value="${f.txt}" oninput="cambiaF(${i},this.value)" spellcheck="false"></div>`).join('');
+  G = Graf.crear(cv, CALC);
+  ajustarCv();
+  cv.addEventListener('wheel', e=>{
+    e.preventDefault();
+    const r=cv.getBoundingClientRect();
+    const mx=(e.clientX-r.left)*(cv.width/r.width), my=(e.clientY-r.top)*(cv.height/r.height);
+    const ax=G.ux(mx), ay=G.uy(my);
+    CALC.esc *= e.deltaY>0 ? 1.15 : 1/1.15;
+    CALC.esc = Math.min(Math.max(CALC.esc, 1e-6), 1e5);
+    CALC.cx += ax - G.ux(mx); CALC.cy += ay - G.uy(my);
+    G.dibujar();
+  }, {passive:false});
+  let arr=null;
+  cv.addEventListener('pointerdown', e=>{ arr={x:e.clientX,y:e.clientY,cx:CALC.cx,cy:CALC.cy}; cv.setPointerCapture(e.pointerId); cv.style.cursor='grabbing'; });
+  cv.addEventListener('pointermove', e=>{
+    if(!arr) return;
+    const r=cv.getBoundingClientRect(), k=cv.width/r.width;
+    CALC.cx = arr.cx - (e.clientX-arr.x)*k*CALC.esc;
+    CALC.cy = arr.cy + (e.clientY-arr.y)*k*CALC.esc;
+    G.dibujar();
+  });
+  cv.addEventListener('pointerup', ()=>{ arr=null; cv.style.cursor='grab'; });
+  window.addEventListener('resize', ajustarCv);
+  G.dibujar();
+}
+function ajustarCv(){
+  if(!cv) return;
+  const r=cv.getBoundingClientRect(), d=window.devicePixelRatio||1;
+  if(r.width<10) return;
+  cv.width=Math.round(r.width*d); cv.height=Math.round(210*d);
+  if(G) G.dibujar();
+}
+function cambiaF(i,txt){
+  const f=CALC.fs[i]; f.txt=txt.trim(); CALC.pts=[]; CALC.sombra=null;
+  const el=document.getElementById('fx'+i), out=document.getElementById('calcOut');
+
+  // Si la casilla tenía una definición y se cambia, se olvida la anterior:
+  // dejarla viva haría que las demás casillas siguieran usando la vieja.
+  if(f.def){ Graf.olvidar(f.def); f.def=null; }
+
+  if(!f.txt){ f.ok=false; el.classList.remove('mal'); out.innerHTML=''; recompilarTodas(); return; }
+  try{
+    const nombre = Graf.definir(f.txt);
+    if(nombre){
+      // «f(x)=…»: se guarda con nombre y además se dibuja su curva.
+      f.def=nombre; f.f=Graf.compilar(nombre+'(x)'); f.ok=true;
+      out.innerHTML='Definida <b>'+escapar(nombre)+'</b>. Ya puedes escribir '+
+        escapar(nombre)+'(x) o '+escapar(nombre)+'(2) en las otras casillas.';
+    }else{
+      f.f=Graf.compilar(f.txt); f.ok=true; out.innerHTML='';
+    }
+    el.classList.remove('mal');
+  }catch(err){
+    f.ok=false; el.classList.add('mal'); out.innerHTML='<b>'+escapar(err.message)+'</b>';
+  }
+  recompilarTodas();
+}
+
+/* Al definir o borrar una función cambian también las casillas que la usaban.
+   Se recompilan todas para que ninguna se quede apuntando a la versión vieja. */
+function recompilarTodas(){
+  CALC.fs.forEach((f,i)=>{
+    if(!f.txt || f.def) return;
+    const el=document.getElementById('fx'+i);
+    try{ f.f=Graf.compilar(f.txt); f.ok=true; if(el) el.classList.remove('mal'); }
+    catch(err){ f.ok=false; if(el) el.classList.add('mal'); }
+  });
+  G.dibujar();
+}
+function rango(){ return [G.ux(0), G.ux(cv.width)]; }
+function fmt(v){
+  if(Math.abs(v)<1e-9) return '0';
+  return (Math.abs(v)<1e4 && Math.abs(v)>1e-3) ? String(+v.toFixed(4)) : v.toExponential(3);
+}
+function marcarCortes(){
+  const [a,b]=rango(); CALC.pts=[]; let txt='';
+  CALC.fs.forEach((f,i)=>{
+    if(!f.ok) return;
+    const cs=Graf.ceros(f.f,a,b,1200);
+    cs.forEach(x=>CALC.pts.push({x,y:0,color:f.color}));
+    txt += cs.length
+      ? `<b style="color:${f.color}">f${i+1}</b> corta el eje X en: ${cs.map(fmt).join(', ')}<br>`
+      : `<b style="color:${f.color}">f${i+1}</b> no corta el eje X aquí<br>`;
+  });
+  document.getElementById('calcOut').innerHTML = txt || 'Escribe alguna función primero.';
+  G.dibujar();
+}
+function marcarCruces(){
+  const act=CALC.fs.filter(f=>f.ok);
+  const out=document.getElementById('calcOut');
+  if(act.length<2){ out.innerHTML='Necesitas al menos <b>dos</b> funciones para buscar intersecciones.'; return; }
+  const [a,b]=rango(); CALC.pts=[]; let txt='';
+  for(let i=0;i<act.length;i++) for(let j=i+1;j<act.length;j++){
+    const d=x=>act[i].f(x)-act[j].f(x);
+    const cs=Graf.ceros(d,a,b,1500);
+    cs.forEach(x=>CALC.pts.push({x,y:act[i].f(x),color:'#D4537E'}));
+    txt += cs.length ? `Se cortan en x = <b>${cs.map(fmt).join(', ')}</b><br>` : 'No se cortan en esta ventana<br>';
+  }
+  txt += '<span style="opacity:.75">Esos valores son los límites de integración del área entre curvas.</span>';
+  out.innerHTML=txt; G.dibujar();
+}
+/* Sombrea la región encerrada entre las dos primeras curvas y da su área.
+   Los límites salen de sus propias intersecciones, no se piden a mano: es el
+   paso que más se equivoca en el laboratorio de área entre curvas. */
+function areaEntre(){
+  const act=CALC.fs.filter(f=>f.ok && f.f);
+  const out=document.getElementById('calcOut');
+  if(act.length<2){ out.innerHTML='Necesitas <b>dos</b> funciones para calcular el área entre ellas.'; return; }
+
+  const [f,g]=act, [a,b]=rango();
+  const cortes=Graf.ceros(x=>f.f(x)-g.f(x), a, b, 2000);
+  if(cortes.length<2){
+    out.innerHTML='Estas curvas no se cortan dos veces en la ventana visible, '+
+      'así que no encierran ninguna región. Aleja la vista o revisa las funciones.';
+    CALC.sombra=null; G.dibujar(); return;
+  }
+
+  // Con más de dos cortes hay varios recintos: se calcula cada uno por separado
+  // porque entre uno y otro cambia cuál curva va por encima, y sumar la
+  // integral con signo de todos daría de menos.
+  let total=0, tramos='';
+  for(let k=0;k<cortes.length-1;k++){
+    const x0=cortes[k], x1=cortes[k+1];
+    const A=Graf.area(f.f,g.f,x0,x1);
+    total+=A;
+    const medio=(x0+x1)/2;
+    const arriba = f.f(medio)>g.f(medio) ? 1 : 2;
+    tramos += `[${fmt(x0)}, ${fmt(x1)}] → <b>${fmt(A)}</b> &nbsp;<span style="opacity:.7">`+
+              `arriba va f${arriba}</span><br>`;
+  }
+
+  CALC.sombra={f:f.f, g:g.f, a:cortes[0], b:cortes[cortes.length-1], color:'rgba(79,140,255,.20)'};
+  CALC.pts=cortes.map(x=>({x, y:f.f(x), color:'#D4537E'}));
+
+  const regiones=cortes.length-1;
+  out.innerHTML =
+    `Área total: <b style="font-size:14px">${fmt(total)}</b><br>`+
+    `<span style="opacity:.75">${regiones} ${regiones===1?'región':'regiones'}, `+
+    `entre x = ${fmt(cortes[0])} y x = ${fmt(cortes[cortes.length-1])}</span><br>`+
+    (regiones>1 ? tramos : '') +
+    `<span style="opacity:.7">Se integra el valor absoluto de la diferencia, por eso sale positiva sin decidir antes quién va arriba.</span>`;
+  G.dibujar();
+}
+
+function resetVista(){ CALC.cx=0; CALC.cy=0; CALC.esc=0.055; CALC.pts=[]; CALC.sombra=null; G.dibujar(); }
+
+/* ---------- calculadora científica ----------
+   Reutiliza el mismo parser de la gráfica: una sola gramática que mantener.
+   Evalúa en x=0 porque aquí no hay variable, solo números. */
+const SCI = { expr:'', ans:0, grados:false, hist:[] };
+
+function sciPintar(){
+  document.getElementById('sciExpr').textContent = SCI.expr || ' ';
+}
+function sciPon(t){ SCI.expr += t; sciPintar(); }
+function sciBorrar(){ SCI.expr = SCI.expr.slice(0,-1); sciPintar(); }
+function sciLimpiar(){
+  SCI.expr=''; sciPintar();
+  const r=document.getElementById('sciRes'); r.textContent='0'; r.className='res';
+}
+function sciAns(){ SCI.expr += String(SCI.ans); sciPintar(); }
+function sciAngulo(m){
+  SCI.grados = (m==='deg');
+  document.getElementById('sciRad').classList.toggle('on', !SCI.grados);
+  document.getElementById('sciDeg').classList.toggle('on',  SCI.grados);
+}
+function sciIgual(){
+  const salida=document.getElementById('sciRes');
+  if(!SCI.expr.trim()){ salida.textContent='0'; salida.className='res'; return; }
+  let e = SCI.expr;
+  // En modo grados se convierte el argumento antes de evaluar.
+  if(SCI.grados){
+    e = e.replace(/\b(sin|cos|tan)\(/g, (m,f)=>f+'((pi/180)*');
+    e = e.replace(/\b(asin|acos|atan)\(/g, (m,f)=>'(180/pi)*'+f+'(');
+  }
+  try{
+    const v = Graf.compilar(e)(0);
+    if(!isFinite(v)) throw new Error(isNaN(v) ? 'resultado no definido' : 'resultado infinito');
+    SCI.ans = v;
+    const txt = (Math.abs(v)<1e-10 && v!==0) || Math.abs(v)>1e12
+      ? v.toExponential(6) : String(+v.toFixed(10));
+    salida.textContent = txt; salida.className='res';
+    SCI.hist.unshift(SCI.expr+' = '+txt);
+    SCI.hist = SCI.hist.slice(0,4);
+    document.getElementById('sciHist').innerHTML =
+      SCI.hist.map(h=>'<div style="font-family:ui-monospace,Consolas,monospace;font-size:12px">'+escapar(h)+'</div>').join('');
+  }catch(err){
+    salida.textContent = err.message; salida.className='res mal';
+  }
+}
+function sciCopiar(){
+  const v=document.getElementById('sciRes').textContent;
+  const b=document.getElementById('sciCopia');
+  navigator.clipboard.writeText(v).then(()=>{
+    b.textContent='copiado';
+    setTimeout(()=>{ b.textContent='Copiar'; },1400);
+  }).catch(()=>{});
+}
+function modoCalc(m){
+  const g = m==='graf';
+  document.getElementById('panel-graf').style.display = g?'':'none';
+  document.getElementById('panel-sci').style.display  = g?'none':'';
+  document.getElementById('modo-graf').classList.toggle('on', g);
+  document.getElementById('modo-sci').classList.toggle('on', !g);
+  localStorage.setItem('tutor_modocalc', m);
+  if(g) setTimeout(ajustarCv,20);
+}
+function togCalc(auto){
+  const c=document.getElementById('calcCuerpo'), b=document.getElementById('calcTog');
+  const oculto=c.style.display==='none';
+  c.style.display=oculto?'':'none'; b.textContent=oculto?'ocultar':'mostrar';
+  if(!auto) calcManual=true;   // decisión tuya: el contexto deja de mandar
+  if(oculto) setTimeout(ajustarCv,20);
+}
+
+/* ── LA CAPA: HERRAMIENTAS Y AJUSTES ─────────────────────────────────────
+ *
+ * Van en una capa por encima y no en una vista más del menú lateral. La
+ * razón es de uso: quien abre la tabla periódica está a mitad de un
+ * ejercicio y quiere volver a él, no navegar a otro sitio. Se abre, se
+ * consulta, se cierra, y la lección sigue donde estaba.
+ */
+/* UNA VENTANA VACÍA NO PUEDE SER UN RESULTADO POSIBLE.
+ *
+ * Esto abría la capa y llamaba a `pinta` sin más. Dos formas de acabar con un
+ * recuadro en blanco que tapa el tutor y no dice nada:
+ *
+ *   1. `Ajustes.pintar` es `async` — consulta la licencia y prueba el motor de
+ *      IA antes de escribir. Mientras tanto la ventana ya está abierta y
+ *      vacía, y si esa comprobación tarda, el alumno mira un hueco.
+ *   2. Si `pinta` lanza, nadie lo recoge. La ventana se queda en blanco para
+ *      siempre y el error solo aparece en la consola, que nadie abre.
+ *
+ * Ahora: se pinta «un momento…» al abrir, se espera a `pinta` aunque devuelva
+ * una promesa, y si algo falla se escribe el fallo DENTRO de la ventana. Un
+ * error que se lee es un problema; un recuadro en blanco es un misterio.
+ */
+function abrirCapa(titulo, pinta) {
+  document.getElementById('capaTit').textContent = titulo || 'Tutor';
+  const cuerpo = document.getElementById('capaCuerpo');
+  cuerpo.innerHTML = '<p style="opacity:.6;padding:18px 0">Un momento…</p>';
+  document.getElementById('capa').hidden = false;
+
+  const fallo = (e) => {
+    cuerpo.innerHTML =
+      '<p style="padding:14px 0"><b>No se pudo abrir esto.</b></p>'
+      + '<p style="opacity:.75">' + String((e && e.message) || e) + '</p>'
+      + '<p style="opacity:.6;font-size:13px">Cierra y sigue estudiando: '
+      + 'el resto del tutor no depende de esta ventana.</p>';
+  };
+
+  try {
+    const r = pinta(cuerpo);
+    // Si `pinta` es async, el «un momento…» se queda hasta que resuelva; y si
+    // rechaza, se ve el porqué en vez de un hueco.
+    if (r && typeof r.then === 'function') r.catch(fallo);
+  } catch (e) {
+    fallo(e);
+  }
+}
+function cerrarCapa() {
+  document.getElementById('capa').hidden = true;
+  const s = document.getElementById('selHerr');
+  if (s) s.value = '';
+}
+// DOS SALIDAS MÁS, PORQUE UNA CAPA ATASCADA TAPA TODO EL TUTOR.
+// Pulsar fuera del recuadro, y la tecla Escape.
+document.addEventListener('DOMContentLoaded', () => {
+  const capa = document.getElementById('capa');
+  if (capa) capa.addEventListener('click', (ev) => {
+    if (ev.target === capa) cerrarCapa();
+  });
+});
+document.addEventListener('keydown', (ev) => {
+  const capa = document.getElementById('capa');
+  if (ev.key === 'Escape' && capa && !capa.hidden) cerrarCapa();
+});
+function abrirHerramienta(id) {
+  if (!id || typeof Herramientas === 'undefined') return;
+  const h = Herramientas.todas().find((x) => x.id === id);
+  abrirCapa(h ? h.nombre : 'Herramienta',
+            (c) => Herramientas.abrir(id, c));
+}
+function verAjustes() {
+  if (typeof Ajustes === 'undefined') return;
+  abrirCapa('Ajustes', (c) => Ajustes.pintar(c));
+}
+
+/* Las herramientas del desplegable, ordenadas por lo que estudia el alumno.
+ * Se llenan tarde, cuando TEMARIO ya está: antes no se sabe de qué materias
+ * se trata y saldrían en un orden cualquiera. */
+(async () => {
+  try { await temarioListo; } catch (e) { /* da igual */ }
+  const s = document.getElementById('selHerr');
+  if (!s || typeof Herramientas === 'undefined') return;
+  const materias = (Array.isArray(TEMARIO) ? TEMARIO.map((m) => m.nombre) : [])
+    .concat(typeof CURRICULO !== 'undefined' ? CURRICULO.map((c) => c.titulo) : []);
+  for (const h of Herramientas.sugeridas(materias)) {
+    const o = document.createElement('option');
+    o.value = h.id;
+    o.textContent = `${h.icono}  ${h.nombre}`;
+    s.appendChild(o);
+  }
+  // El botón de ajustes solo aparece si esta copia es de un alumno —tiene
+  // licencia—. En la carpeta de Nicolás no pinta nada.
+  if (typeof Licencia !== 'undefined') {
+    Licencia.activa().then((l) => {
+      const b = document.getElementById('btnAjustes');
+      if (b && l) b.hidden = false;
+      if (l && typeof TrabajosNuevos !== 'undefined') TrabajosNuevos.activar();
+    });
+  }
+})();
+
+initCalc();
+detectar();
+
+/* ¿ARRANCA EL TUTOR, O EL ASISTENTE DE PRIMERA VEZ?
+ *
+ * Depende de si hay contenido. En la carpeta de Nicolás lo hay —18 lecciones
+ * y 425 pasajes del campus— y esto no se nota: arranca el tutor de siempre,
+ * exactamente igual que ayer.
+ *
+ * En una instalación nueva no hay nada. Y un tutor vacío, sin lecciones y sin
+ * temario, no es «un tutor por estrenar»: parece roto. El alumno no tiene
+ * forma de saber que primero hay que activar la licencia y cargar sus PDF.
+ *
+ * La condición es tener CONTENIDO, no tener licencia. Alguien con la licencia
+ * activada pero sin PDF cargados sigue necesitando el asistente; y al revés,
+ * la carpeta de Nicolás no tiene licencia y no debe pedirla.
+ */
+(async () => {
+  if (typeof Ajustes === 'undefined') return;      // carpeta sin los módulos
+  // SE ESPERA A QUE EL TEMARIO TERMINE DE CARGAR, no un plazo fijo.
+  // Antes eran 600 ms: aquí sobraban y en un computador más lento no
+  // llegaban, y entonces el asistente aparecía encima de un tutor que ya
+  // tenía las lecciones del alumno cargadas.
+  try { await temarioListo; } catch (e) { /* si falla, se sigue */ }
+  const hayLecciones = typeof CURRICULO !== 'undefined' && CURRICULO.length > 0;
+  const hayTemario = Array.isArray(TEMARIO) && TEMARIO.length > 0;
+  if (hayLecciones || hayTemario) return;
+
+  window.__primeraVez = true;
+  const capa = document.createElement('div');
+  capa.id = 'primeraVez';
+  /* EL FONDO SALE DEL TEMA, no escrito a mano.
+     Estaba clavado en #f7f8fa, que es claro siempre. Con el tema oscuro
+     esta capa tapaba el fondo oscuro del body con uno claro, y el texto
+     —que sí seguía al tema— quedaba claro sobre claro: el título
+     «Vamos a montar tu tutor» no se leía. Medido el 04/11/2026. */
+  capa.style.cssText = 'position:fixed;inset:0;z-index:9999;overflow:auto;'
+    + 'background:var(--bg);padding:2rem';
+  document.body.appendChild(capa);
+  await Ajustes.pintar(capa);
+
+  // Cuando termina los tres pasos, se recarga: así el tutor arranca con su
+  // temario ya puesto por el camino normal, sin un segundo camino que
+  // mantener.
+  capa.addEventListener('tutor:listo', () => location.reload());
+})();
+</script>
+</body>
+</html>

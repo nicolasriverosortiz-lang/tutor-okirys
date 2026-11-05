@@ -1,0 +1,71 @@
+{
+  "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
+  "productName": "Tutor Okirys",
+  "version": "1.0.0",
+  "identifier": "business.okirys.tutor",
+  "build": {
+    "frontendDist": "../programa"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "principal",
+        "title": "Tutor Okirys",
+        "url": "tutor.html",
+        "width": 1280,
+        "height": 860,
+        "minWidth": 1024,
+        "minHeight": 680,
+        "resizable": true,
+        "center": true,
+        "fullscreen": false
+      }
+    ],
+    "security": {
+      "csp": {
+        "default-src": "'self'",
+        "script-src": "'self' 'unsafe-inline' 'unsafe-eval'",
+        "style-src": "'self' 'unsafe-inline'",
+        "img-src": "'self' data: blob:",
+        "font-src": "'self' data:",
+        "worker-src": "'self' blob:",
+        "connect-src": [
+          "'self'",
+          "blob:",
+          "data:",
+          "https://clyortenqurudnsyxzxl.supabase.co",
+          "http://localhost:1234",
+          "http://127.0.0.1:1234",
+          "https://api.groq.com",
+          "https://api.openai.com",
+          "https://api.anthropic.com",
+          "https://api.cerebras.ai",
+          "https://generativelanguage.googleapis.com"
+        ]
+      }
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis", "msi"],
+    "publisher": "Okirys",
+    "copyright": "Okirys",
+    "category": "Education",
+    "shortDescription": "Tutor de estudio con tus propios PDF",
+    "longDescription": "Convierte el temario de tu universidad en lecciones, ejercicios y fichas de repaso. Funciona sin internet.",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser",
+        "languages": ["Spanish"],
+        "displayLanguageSelector": false
+      }
+    }
+  }
+}
