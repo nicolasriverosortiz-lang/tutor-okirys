@@ -139,6 +139,30 @@ const Cargador = (() => {
         throw new Error('No se cargó el lector de PDF. Comprueba que '
           + 'pdfjs.js y pdfjs-worker.js están junto a tutor.html.');
       }
+
+      // ─────────────────────────────────────────────────────────────
+      // EL WORKER. SIN ESTA LÍNEA LA APP SE CONGELA ENTERA.
+      // ─────────────────────────────────────────────────────────────
+      // `pdfjs-worker.js` estaba junto a `tutor.html` —un mega entero— y
+      // hasta el mensaje de error de aquí arriba lo nombraba. Pero nadie
+      // le decía nunca a pdf.js dónde encontrarlo.
+      //
+      // Sin `workerSrc`, pdf.js no se queja: se pasa a su modo de
+      // respaldo y analiza el PDF EN EL HILO DE LA INTERFAZ. Con un
+      // temario de cien páginas la ventana deja de responder por
+      // completo —no cierra, no abre, nada— y el proceso padre marca 0 %
+      // de CPU, porque quien está quemando el procesador es el proceso
+      // hijo del WebView. Parece colgada sin motivo.
+      //
+      // Encontrado el 09/11/2026, cargando sus PDF de verdad.
+      //
+      // Se pone aquí y no al cargar la página porque `pdfjsLib` no existe
+      // hasta que el navegador termina de leer `pdfjs.js`; en `<head>`
+      // sería `undefined`. Es idempotente: cuesta nada repetirlo.
+      if (!pdfjsLib.GlobalWorkerOptions.workerSrc) {
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'pdfjs-worker.js';
+      }
+
       const datos = new Uint8Array(await archivo.arrayBuffer());
       const doc = await pdfjsLib.getDocument({ data: datos }).promise;
 
