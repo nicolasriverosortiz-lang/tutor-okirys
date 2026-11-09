@@ -47,7 +47,7 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis", "msi"],
+    "targets": "all",
     "publisher": "Okirys",
     "copyright": "Okirys",
     "category": "Education",

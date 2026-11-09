@@ -89,13 +89,22 @@ jobs:
 
       # Linux necesita WebKitGTK: Tauri usa el motor del sistema, y en
       # Ubuntu no viene puesto. Sin esto la compilación falla al enlazar.
+      #
+      # OJO CON LOS INDICADORES: `libappindicator3-dev` y
+      # `libayatana-appindicator3-dev` son el mismo paquete en dos
+      # versiones y **no pueden convivir**. Pidiendo los dos, apt
+      # contesta «you have held broken packages» y se cae el trabajo
+      # entero (05/11/2026). Va solo el de ayatana, que es el que usa
+      # Tauri v2. Esta lista es la de su documentación para Ubuntu 22.04,
+      # ni un paquete más ni uno menos.
       - name: Dependencias de Linux
         if: matrix.nombre == 'linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev \
-            librsvg2-dev patchelf build-essential curl wget file \
-            libssl-dev libayatana-appindicator3-dev
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev build-essential curl wget file \
+            libxdo-dev libssl-dev libayatana-appindicator3-dev \
+            librsvg2-dev patchelf
 
       - uses: dtolnay/rust-toolchain@stable
 
@@ -139,13 +148,37 @@ jobs:
         run: |
           mkdir -p entrega
           B=src-tauri/target/release/bundle
+
+          # Se copia lo que HAYA, no lo que se supone que debería haber.
+          # Un `cp` a secas sobre un patrón que no casa tumba el paso
+          # entero: con `targets: all` cada sistema genera lo suyo y la
+          # lista exacta puede cambiar entre versiones de Tauri. Que
+          # falte el .deb no puede impedir que se publique el AppImage.
+          copiar() {    # copiar <patrón> <nombre destino>
+            for f in $1; do
+              [ -e "$f" ] || continue
+              cp "$f" "entrega/$2"
+              echo "   $f  ->  $2"
+              return 0
+            done
+            echo "   (no se generó $2)"
+          }
+
           case "${{ matrix.nombre }}" in
-            windows) cp $B/nsis/*.exe entrega/Tutor-Okirys.exe
-                     cp $B/msi/*.msi  entrega/Tutor-Okirys.msi ;;
-            macos)   cp $B/dmg/*.dmg  entrega/Tutor-Okirys.dmg ;;
-            linux)   cp $B/appimage/*.AppImage entrega/Tutor-Okirys.AppImage
-                     cp $B/deb/*.deb  entrega/Tutor-Okirys.deb ;;
+            windows) copiar "$B/nsis/*.exe"          Tutor-Okirys.exe
+                     copiar "$B/msi/*.msi"           Tutor-Okirys.msi ;;
+            macos)   copiar "$B/dmg/*.dmg"           Tutor-Okirys.dmg ;;
+            linux)   copiar "$B/appimage/*.AppImage" Tutor-Okirys.AppImage
+                     copiar "$B/deb/*.deb"           Tutor-Okirys.deb ;;
           esac
+
+          # Pero vacío sí es un fallo: si no salió NADA, mejor enterarse
+          # aquí que publicar una versión sin instalador.
+          test -n "$(ls -A entrega 2>/dev/null)" || {
+            echo "::error::no quedó ningún instalador en entrega/"
+            find $B -maxdepth 2 -type d
+            exit 1
+          }
           ls -la entrega/
 
       - uses: actions/upload-artifact@v4
