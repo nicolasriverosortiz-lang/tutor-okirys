@@ -36,9 +36,63 @@ const Cargador = (() => {
   const MINIMO = 220;
   const OBJETIVO = 900;
 
+  // LOS TOPES. Un temario universitario de una materia rara vez pasa de
+  // 300 páginas o 40 MB; lo que llega por encima o es un libro entero
+  // —que da peores lecciones, porque el contexto se diluye— o es un
+  // archivo pensado para tumbar la app. En los dos casos la respuesta
+  // es la misma y hay que decirla con palabras, no con una ventana
+  // colgada.
+  const MAX_BYTES = 60 * 1e6;
+  const MAX_PAGINAS = 400;
+  const MAX_CARACTERES = 4e6;
+
+  // ───────────────────────────────────────────────────────────────────
+  // LO QUE SE LE QUITA A UN PDF ANTES DE QUE NADIE LO TOQUE
+  // ───────────────────────────────────────────────────────────────────
+  //
+  // El PDF lo trae el alumno y puede venir de cualquier parte: un grupo
+  // de WhatsApp, una web de apuntes, un correo. No es un archivo de
+  // confianza, aunque quien lo carga sí lo sea.
+  //
+  // Tres cosas que un PDF preparado puede esconder y que aquí se van:
+  //
+  // 1. CARACTERES INVISIBLES. El ancho cero (U+200B-200D, U+FEFF) y los
+  //    de dirección (U+202A-202E, U+2066-2069) no se ven al leer el PDF
+  //    pero sí llegan al modelo. Con ellos se puede escribir una
+  //    instrucción que una persona no lee y la máquina sí. También
+  //    sirven para partir palabras y saltarse filtros: «scr​ipt».
+  //
+  // 2. CARACTERES DE CONTROL. No aportan nada a un temario y ensucian
+  //    tanto el prompt como el almacén.
+  //
+  // 3. ETIQUETAS. Un PDF puede llevar «<img src=x onerror=...>» como
+  //    texto. Hoy el buscador lo escapa bien, pero basta que algún día
+  //    alguien pinte un pasaje sin escapar para abrir un agujero. Se
+  //    quita en el origen y deja de ser un problema de quien pinta.
+  //
+  // Lo que NO se intenta aquí es detectar inyecciones de prompt por su
+  // texto —«ignora las instrucciones anteriores»—. Esa lista siempre va
+  // por detrás de quien la quiere saltar. Contra eso vale delimitar el
+  // pasaje en el prompt y limpiar lo que el modelo devuelve, que es lo
+  // que ya hace `generador.js`.
+  const INVISIBLES =
+    /[­​-‏‪-‮⁠-⁤⁦-⁩﻿]/g;
+  const CONTROL = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g;
+
+  function desarmar(t) {
+    return String(t || '')
+      .replace(INVISIBLES, '')
+      .replace(CONTROL, ' ')
+      // Las etiquetas se convierten en texto legible en vez de borrarse:
+      // si el temario habla DE HTML —y en ingeniería de sistemas pasa—,
+      // el alumno tiene que poder leer el ejemplo.
+      .replace(/</g, '‹')
+      .replace(/>/g, '›');
+  }
+
   /** Quita lo que ensucia el texto de un PDF sin aportar nada. */
   function limpiar(t) {
-    return t
+    return desarmar(t)
       // Los guiones de final de línea parten palabras: «propo-\nsición».
       .replace(/(\w)-\s*\n\s*(\w)/g, '$1$2')
       // Saltos sueltos dentro de una frase: en un PDF son de maquetación,
@@ -127,6 +181,7 @@ const Cargador = (() => {
   }
 
   return {
+    _desarmar: desarmar,     // lo usa revisar_limpieza.html
     /**
      * Lee un PDF y devuelve sus pasajes. No guarda nada: eso lo decide quien
      * llama, después de enseñárselos al alumno.
@@ -163,11 +218,35 @@ const Cargador = (() => {
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'pdfjs-worker.js';
       }
 
+      // EL TAMAÑO, ANTES DE ABRIRLO.
+      // Un PDF de 400 MB no se rechaza por sospechoso: se rechaza porque
+      // cargarlo entero en memoria deja la app inservible, y el alumno
+      // merece saber por qué en vez de ver una ventana muerta.
+      if (archivo.size > MAX_BYTES) {
+        throw new Error(
+          `«${archivo.name}» pesa ${(archivo.size / 1e6).toFixed(0)} MB y el `
+          + `tope son ${MAX_BYTES / 1e6} MB. Pártelo por capítulos: además `
+          + 'el tutor arma mejores lecciones con un temario por materia.');
+      }
+
       const datos = new Uint8Array(await archivo.arrayBuffer());
       const doc = await pdfjsLib.getDocument({ data: datos }).promise;
 
+      if (doc.numPages > MAX_PAGINAS) {
+        throw new Error(
+          `«${archivo.name}» tiene ${doc.numPages} páginas y el tope son `
+          + `${MAX_PAGINAS}. Carga el capítulo que estés estudiando.`);
+      }
+
       let texto = '';
       for (let n = 1; n <= doc.numPages; n++) {
+        // Y EL TOPE DE TEXTO, POR SI LAS PÁGINAS SON POCAS PERO ENORMES.
+        // Un PDF puede tener diez páginas con un millón de caracteres
+        // cada una. El contador de páginas no lo ve venir.
+        if (texto.length > MAX_CARACTERES) {
+          texto += '\n\n[El temario se cortó aquí: superó el tamaño máximo.]';
+          break;
+        }
         const pag = await doc.getPage(n);
         const cont = await pag.getTextContent();
         // `str` con un espacio entre trozos, y salto donde pdf.js marca fin
