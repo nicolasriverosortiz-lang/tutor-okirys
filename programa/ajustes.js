@@ -363,6 +363,43 @@ const Ajustes = (() => {
      * otra vez, y luego otra. Por eso: se dice cuánto va a tardar antes de
      * empezar, y se cuenta cada una mientras avanza.
      */
+    /**
+     * El aviso que se ve ESTÉ DONDE ESTÉ EL ALUMNO.
+     *
+     * El mensaje de progreso vivía dentro del panel de ajustes. Armar un
+     * temario tarda de tres a cinco minutos, y quien cierra ese panel
+     * —que es lo natural, para seguir estudiando mientras tanto— se
+     * queda sin una sola señal de que algo esté pasando. Visto el
+     * 09/11/2026: la app parecía colgada cuando estaba trabajando.
+     *
+     * Va pegado a la ventana y por encima de todo, para que no dependa
+     * de qué pantalla esté abierta.
+     */
+    _barra(texto, estado) {
+      let b = document.getElementById('gen-barra');
+      if (!b) {
+        b = document.createElement('div');
+        b.id = 'gen-barra';
+        b.style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);'
+          + 'bottom:18px;z-index:9999;padding:.7rem 1.1rem;border-radius:999px;'
+          + 'font:500 14px/1.4 inherit;box-shadow:0 6px 24px rgba(0,0,0,.28);'
+          + 'max-width:min(92vw,560px);text-align:center;'
+          + 'background:var(--panel,#1b2330);color:var(--ink,#e8edf4);'
+          + 'border:1px solid var(--line,#2a323d)';
+        document.body.appendChild(b);
+      }
+      if (texto === null) { b.remove(); return; }
+      b.textContent = texto;
+      b.style.borderColor = estado === 'mal' ? '#B3261E'
+        : estado === 'bien' ? '#1B7F4C' : 'var(--line,#2a323d)';
+      // El mensaje final se queda un rato y se va solo; el de progreso
+      // se queda hasta que lo cambien.
+      if (estado) setTimeout(() => {
+        const v = document.getElementById('gen-barra');
+        if (v === b) b.remove();
+      }, 12000);
+    },
+
     async generar(clave, donde, decir, boton) {
       const todos = await Almacen.todosLosPasajes();
       const pasajes = todos.filter((p) => p.materia === clave);
@@ -377,17 +414,57 @@ const Ajustes = (() => {
 
       boton.disabled = true;
       const antes = boton.textContent;
+      const t0 = Date.now();
+      const transcurrido = () => {
+        const s = Math.round((Date.now() - t0) / 1000);
+        return s < 60 ? `${s} s` : `${Math.floor(s / 60)} min ${s % 60} s`;
+      };
       try {
         decir('#aj-gen-msg', 'Armando lecciones…');
+        this._barra('Armando lecciones… puedes seguir usando el tutor.');
         const { lecciones, fallidos } = await Generador.generar(
           pasajes, clave,
-          (n, t) => { boton.textContent = `lección ${n}/${t}`;
-                      decir('#aj-gen-msg', `Lección ${n} de ${t}…`); },
+          (n, t) => {
+            boton.textContent = `lección ${n}/${t}`;
+            decir('#aj-gen-msg', `Lección ${n} de ${t}…`);
+            // CON EL TIEMPO TRANSCURRIDO. Un «3 de 10» no dice si va
+            // bien o si lleva veinte minutos atascado; «3 de 10 · 1 min
+            // 12 s» sí, y es la diferencia entre esperar y matar la app.
+            this._barra(`Armando «${clave}»: lección ${n} de ${t} · ${transcurrido()}`);
+          },
           cuantas);
 
         decir('#aj-gen-msg', 'Armando fichas de repaso…');
+        this._barra(`Armando las fichas de repaso… · ${transcurrido()}`);
         boton.textContent = 'fichas…';
         const { fichas } = await Generador.fichas(pasajes, clave, null, 7, 3);
+
+        const nf = Object.keys(fichas).length;
+
+        // SE COMPRUEBA ANTES DE GUARDAR, no después.
+        //
+        // CERO LECCIONES NO ES UN ÉXITO CON UN NÚMERO PEQUEÑO.
+        //
+        // El mensaje decía «Listas 0 lecciones y 3 fichas» y se leía como
+        // que todo había ido bien; el alumno cerraba los ajustes y se
+        // encontraba «Aún no hay temario» sin ninguna explicación. Le
+        // pasó a Nicolás el 09/11/2026 y dio la app por colgada.
+        //
+        // Cuando no sale ninguna hay un motivo concreto —el modelo no
+        // devolvió JSON, copió el pasaje, los ejercicios no cuadraban— y
+        // está en `fallidos`. Se enseña, porque dice qué hacer: casi
+        // siempre es cambiar a un modelo más grande.
+        if (!lecciones.length) {
+          const porques = [...new Set(fallidos.map((f) => f.porque))].slice(0, 3);
+          const msg = 'No salió ninguna lección utilizable de '
+            + `${fallidos.length} intento(s). `
+            + (porques.length ? `El modelo falló por: ${porques.join('; ')}. ` : '')
+            + 'Con un modelo pequeño pasa a menudo: prueba con uno más '
+            + 'grande, o con una clave en internet desde Ajustes.';
+          decir('#aj-gen-msg', msg, true);
+          this._barra('No salió ninguna lección. Abre Ajustes para ver por qué.', 'mal');
+          return;                      // no se guarda un temario vacío
+        }
 
         // Se guarda junto al temario, en el almacén del alumno. `tutor.html`
         // lo lee al arrancar igual que lee los pasajes.
@@ -400,7 +477,6 @@ const Ajustes = (() => {
         };
         await Almacen.ajuste('generado', antesGuardado);
 
-        const nf = Object.keys(fichas).length;
         decir('#aj-gen-msg',
           `Listas ${lecciones.length} lecciones y ${nf} fichas.`
           + (fallidos.length
@@ -408,8 +484,12 @@ const Ajustes = (() => {
               + '—preferimos quitarlas a que te corrijan mal.'
             : '')
           + ' Cierra los ajustes para verlas.');
+        this._barra(
+          `Listas ${lecciones.length} lecciones de «${clave}» en ${transcurrido()}.`
+          + (fallidos.length ? ` ${fallidos.length} descartadas.` : ''), 'bien');
       } catch (e) {
         decir('#aj-gen-msg', 'No se pudieron armar: ' + e.message, true);
+        this._barra('No se pudieron armar las lecciones: ' + e.message, 'mal');
       } finally {
         boton.disabled = false;
         boton.textContent = antes;

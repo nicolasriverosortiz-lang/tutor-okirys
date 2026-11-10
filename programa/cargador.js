@@ -230,7 +230,26 @@ const Cargador = (() => {
       }
 
       const datos = new Uint8Array(await archivo.arrayBuffer());
-      const doc = await pdfjsLib.getDocument({ data: datos }).promise;
+      const doc = await pdfjsLib.getDocument({
+        data: datos,
+        // SIN `new Function`, PARA PODER CERRAR LA CSP.
+        //
+        // pdf.js compila con `new Function` las funciones PostScript de
+        // tipo 4 que algunos PDF usan para degradados. Es la única razón
+        // por la que la app necesitaba `unsafe-eval` en su política de
+        // seguridad, y `unsafe-eval` es lo que convierte una inyección
+        // en ejecución de código arbitrario.
+        //
+        // Con esto pdf.js usa su intérprete propio: algo más lento en
+        // esos PDF concretos, y ninguna diferencia en un temario, que no
+        // lleva degradados. A cambio se quita un permiso que valía para
+        // todo el programa.
+        isEvalSupported: false,
+        // Tampoco hace falta ejecutar el JavaScript que un PDF puede
+        // llevar incrustado. Un temario no lo necesita; un PDF hostil
+        // sí lo agradecería.
+        enableScripting: false,
+      }).promise;
 
       if (doc.numPages > MAX_PAGINAS) {
         throw new Error(
